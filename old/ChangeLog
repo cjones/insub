@@ -1,3 +1,6 @@
+3.8: Mon Jul 28 09:35:25 2003
+    * add col function to display colmap
+
 3.7: Fri Jul 25 08:44:07 2003
     * added -matrix to re-align text up/down..
     * new settings: matrix_size <#>, matrix_spacing <#>
