@@ -1,3 +1,9 @@
+8.5: Tue Apr 13 13:00:02 2004
+    * remove legacy open3() and use IPC::Open3 -- works in 5.8 now
+    * support for specifying color in -4 .. for example -4red
+    * added some more spookwords
+    * added the -unused command
+
 8.3: Sat Jan 17 23:03:50 2004
     * added -ansi flag to force ANSI output in cases where it is not
       detected properly and tries to use irc colors
