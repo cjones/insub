@@ -1,3 +1,7 @@
+9.0: Tue Jun  1 18:28:08 2004
+    * add -mirc flag to force mirc colors from commandline
+    * added zb's new cowfiles.  best ever.
+
 8.9: Wed May  5 09:20:40 2004
     * Fix utf8 bug for reals
 
