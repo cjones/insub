@@ -1,3 +1,9 @@
+3.7: Fri Jul 25 08:44:07 2003
+    * added -matrix to re-align text up/down..
+    * new settings: matrix_size <#>, matrix_spacing <#>
+    * added -arrow routine.. just like -box, except with a different style
+      (thanks to rob)
+
 3.6: Mon Jul 21 14:13:42 2003
     * fixed leading blank line in some figlets
 
