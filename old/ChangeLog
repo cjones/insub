@@ -1,3 +1,9 @@
+9.1: Sun Jul  4 01:15:43 2004
+    * added -rotate, which flips a figlet 90 degrees clockwise (only
+      really works well with block-fonts, like "banner3"
+    * you can now use <random> for the font or cowfile, and it will pick
+      one for you.
+
 9.0: Tue Jun  1 18:28:08 2004
     * add -mirc flag to force mirc colors from commandline
     * added zb's new cowfiles.  best ever.
