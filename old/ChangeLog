@@ -1,3 +1,23 @@
+8.0: Mon Jan  5 04:11:46 2004
+    * rewrote credits
+    * general code cleanup
+    * abstracted name from code for "clean" release
+    * bugfix: cprint() doesn't handle various states of newline properly.
+      clean that up, and add cprint_lines function for large chunks of
+      text
+    * rewrote USAGE
+    * wrote code for HTML output
+    * fixed do_color() to do html and bg color
+    * made show_colmap() dynamiclly generated
+    * added spook words
+    * bugfix: terminal spews undef warnings if run w/o flags
+    * fixed -checker to run with do_color
+    * fixed tree() to run with do_dolcor
+    * updated clean_length() to handle all cases
+    * rewrote -help
+    * dynamically generate alias names for exec and cat
+    * draw_box() doesn't try to use irssi codes if not in irssi
+
 7.0: Sun Dec 28 22:18:24 2003
     * made executable on the commandline and from within epic (via /exec
       -o)
