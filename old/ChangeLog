@@ -1,3 +1,6 @@
+9.8: Thu Feb 17 03:19:08 2005
+    * implement port of banner in perl, for hosts that don't have it
+
 9.7: Wed Feb 16 10:03:29 2005
     * added bens banner wrappers
     * some backend code cleanup
