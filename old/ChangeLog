@@ -1,3 +1,9 @@
+6.3: Mon Dec  1 19:03:49 2003
+    * added -7 (christmas colors!)
+    * added -tree (makes your ascii look like a xmas tree)
+    * some backend changes to flag parsing.. if you add a new routine its
+      flag must be present in $flag_list
+
 6.2: Mon Dec  1 16:05:42 2003
     * added -jigs (shift right toprow keys)
     * fixed bug with \ at end of line deep recursion
