@@ -1,0 +1,43 @@
+Put the perl script in your irssi scripts directory, or in
+~/.irssi/scripts.
+
+In irssi, type /run <scriptname>
+
+Or from the commandline, just run insub.pl. It'll output in ANSI but you can
+add -mirc or -html, and so on, to coerce the output.
+
+Some of the filters rely on third-party tools being installed, such as figlet.
+So you should install that if you want to figletize.
+
+Be nice.
+
+== COWSAY SUPPORT ==
+If you want cowsay support, install cowsay and optionally throw all the
+cowfiles included here into  your global cowfile directory for even more
+offensive ascii technology.
+====================
+
+USAGE:
+
+some examples:
+
+./insub.pl -1 -figlet -cow hi
+
+ -----------
+/  _     _  \
+| | |__ (_) |
+| | '_ \| | |
+| | | | | | |
+\ |_| |_|_| /
+ -----------
+        \   ^__^
+         \  (oo)\_______
+            (__)\       )\/\
+                ||----w |
+                ||     ||
+
+
+
+
+author: cj_ <cjones@insub.org>
+dist: http://gruntle.org/projects/irssi/insub

@@ -1,0 +1,19 @@
+$the_cow = <<"EOC";
+      $thoughts
+       $thoughts
+        $thoughts                       .  ooOOOOOoo,.
+         $thoughts                  ...el OOOOOOOOOOOOOo.
+          $thoughts           ...eelllll OOOOOOOOOOOOOOOo
+ ;,,.          ...elllllllllllll OOOOOOOOOOOOOOO
+ .;,,:,;`eeeeelllllllllllllllllll OOOOOOOOOOO*'
+ .,;,,.`lllllllllllllllllllllllllll`*OOO*""``
+  .;;;`:llllll;;llllllllllllle*"``
+ ; ",'`::llllllllllllle*""`
+ ,.';`: :llllllle""``      `
+ "'`:'" ;eee\@\@el`
+ ,;';'':%\@\@\@\@\@\@\@.
+ ';,'.:%%\@\@\@\@\@\@\@*
+  ';,.\@\@\@\@\@\@\@\@\@\@*
+  ;;';';\@\@\@\@\@\@\@\@'
+  ';';  ~\@\@\@\@\@~
+EOC
