@@ -1,3 +1,6 @@
+3.9: Thu Aug 14 13:18:37 2003
+    * added /spook command (-spook flag)
+
 3.8: Mon Jul 28 09:35:25 2003
     * add col function to display colmap
 
