@@ -1,3 +1,7 @@
+2.8: Wed Jul 16 18:07:04 2003
+    * add -3d routine
+    * add cat to pipe files to chan
+
 2.7: Wed Jul 16 11:42:28 2003
     * understands quoting, for example -pre "hey there"
 
