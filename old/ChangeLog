@@ -1,3 +1,7 @@
+3.1: Fri Jul 18 10:07:06 2003
+    * added 'col' command to get summary of color code meanings
+    * check_colors can specify any amount of colors
+
 3.0: Thu Jul 17 17:14:13 2003
     * added -check support.  new variables:
     * check_text (color of text when using -check)
