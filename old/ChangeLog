@@ -1,3 +1,6 @@
+3.3: Sun Jul 20 13:00:55 2003
+    * bugfix: don't use hardcoded cowpath :P
+
 3.2: Sun Jul 20 07:07:59 2003
     * added -capchk function.  overrides -check.  apply check only to
       contents of cowsay bubble
