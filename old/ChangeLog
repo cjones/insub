@@ -1,3 +1,11 @@
+5.6: Mon Aug 25 02:13:36 2003
+    * added the -mirror command to reverse ascii; lacks full integration,
+      but will reverse cows and figlets. beware color cows with -capchk
+      and -mirror.  DANGER
+    * added some spook words
+    * fixed bug: don't continue with empty cowsay if there is a problem
+      parsing args
+
 5.5: Mon Aug 18 17:45:31 2003
     * added -hug switch HUUGZ!
     * some code cleanup
