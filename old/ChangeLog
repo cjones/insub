@@ -1,3 +1,9 @@
+5.8: Tue Aug 26 11:21:15 2003
+    * added -flip command (like mirror, only other axis)
+    * added some sanity checking for certain combination of flags.  use
+      -YES to override these if you don't want sanity
+    * added some more spook words
+
 5.7: Mon Aug 25 02:32:22 2003
     * Fixed showstopper bug!!
 
