@@ -1,3 +1,17 @@
+8.2: Tue Jan 13 19:01:09 2004
+    * If not Irssi, rainbow keepstate is down with a dotfile
+    * Bugfix: HTML < and > entity escaping fixed
+    * Bugfix: IRC output doesn't use ANSI resets (breaks xchat! thanks
+      kin)
+    * Optimization: Don't change HTML bgcolor unless it differs from the
+      default black.. saves lots of space
+    * Make Term::ANSIColor optional (ansi is disabled if no lib)
+    * Silenced the throttling message, what's the point of THAT
+    * Cleaned up the COWPATH code a bit.. better detection
+    * html output has div container to set background to black, for
+      pasting chunks of html, e.g. to livejournal.
+    * Abstract prefix code to its own filter, for code consistency
+
 8.1: Tue Jan 13 00:53:55 2004
     * increased default linewrap
     * removed ansi reset from mirc output
