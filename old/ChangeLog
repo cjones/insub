@@ -1,3 +1,12 @@
+9.5: Sat Dec  4 01:17:18 2004
+    * moved -exec command into process(), so irssi can use it
+    * fix bug that wouldn't let '0' be printed by itself
+    * add -repeat flag ("-repeat 3 foo" becomes foofoofoo)
+    * fix bug that would prevent a single character from displaying
+    * retool -sine iterator a little better
+    * minor code cleanup
+    * make both -wave and -sine do the same thing
+
 9.4: Sun Nov 28 20:02:02 2004
     * added sine-wave function (use -wave)
     * added zb's color optimization changes
