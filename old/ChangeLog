@@ -1,3 +1,8 @@
+8.1: Tue Jan 13 00:53:55 2004
+    * increased default linewrap
+    * removed ansi reset from mirc output
+    * added -html flag
+
 8.0: Mon Jan  5 04:11:46 2004
     * rewrote credits
     * general code cleanup
