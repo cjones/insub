@@ -1,3 +1,10 @@
+3.2: Sun Jul 20 07:07:59 2003
+    * added -capchk function.  overrides -check.  apply check only to
+      contents of cowsay bubble
+    * allow user to embed "\n" in text
+    * uses custom implementation of cowsay parser.  should be transparent,
+      but allows colorizing inside of cowtext
+
 3.1: Fri Jul 18 10:07:06 2003
     * added 'col' command to get summary of color code meanings
     * check_colors can specify any amount of colors
