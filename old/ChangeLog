@@ -1,3 +1,6 @@
+8.9: Wed May  5 09:20:40 2004
+    * Fix utf8 bug for reals
+
 8.8: Wed Apr 28 22:52:36 2004
     * add -bash flag to do escaping (see POD for details)
     * bugfix: don't try utf8 in perl < 5.8
