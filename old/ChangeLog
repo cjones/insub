@@ -1,3 +1,21 @@
+8.7: Mon Apr 26 12:56:43 2004
+    * 8.7 changes submitted by j0no:
+    * AOL Instant Messenger support.
+    * phpBB bbcode support
+    * orkut support
+    * Fixed mIRC code hack. (\x0F instead of \x03\26\26)
+    * & -> &amp; in HTML and AIM
+    * -cmd flag to run any irssi command! Use quotes for stuff like "kick
+      zb"
+    * -utf8 flag for cat
+    * Bugfix: Rainbow Offset saved across figs.
+    * -8 Canada colour map
+    * Added check to skip the last mile if there's nothing to process.
+    * Added a -mirc flag to force mIRC codes
+    * clean_length() repaired
+    * other fixes:
+    * verified all filters handle undef properly
+
 8.6: Tue Apr 13 15:17:51 2004
     * add flags for cli: -stdin will use data from STDIN
     * add flags for cli: -cat, -exec to hook irssi functionality
