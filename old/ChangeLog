@@ -1,3 +1,9 @@
+3.0: Thu Jul 17 17:14:13 2003
+    * added -check support.  new variables:
+    * check_text (color of text when using -check)
+    * check_size (size of grid)
+    * check_colors #,#  (the two colors to alternate in grid)
+
 2.8: Wed Jul 16 18:07:04 2003
     * add -3d routine
     * add cat to pipe files to chan
