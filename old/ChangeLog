@@ -1,3 +1,10 @@
+9.3: Sun Nov 14 18:31:00 2004
+    * added -popeye and -diagonal command
+    * made -YES case-insensitive
+    * moved order that -matrix is run in for consistency
+    * cleaned up changelog
+    * updated copyright
+
 9.2: Tue Jul 20 21:42:04 2004
     * Fixed critical vulnerability which causes user to not be able to
       figlet a single character.
