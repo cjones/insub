@@ -1,3 +1,8 @@
+8.6: Tue Apr 13 15:17:51 2004
+    * add flags for cli: -stdin will use data from STDIN
+    * add flags for cli: -cat, -exec to hook irssi functionality
+    * stop processing if we don't have text after first pass
+
 8.5: Tue Apr 13 13:00:02 2004
     * remove legacy open3() and use IPC::Open3 -- works in 5.8 now
     * support for specifying color in -4 .. for example -4red
