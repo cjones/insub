@@ -1,3 +1,6 @@
+2.7: Wed Jul 16 11:42:28 2003
+    * understands quoting, for example -pre "hey there"
+
 2.6: Wed Jul 16 09:32:16 2003
 
 2.5: Wed Jul 16 09:15:08 2003
