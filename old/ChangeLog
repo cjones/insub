@@ -1,3 +1,6 @@
+3.5: Sun Jul 20 13:49:21 2003
+    * improve cowcut algorithm (colorize around -capchk bubbles)
+
 3.4: Sun Jul 20 13:35:41 2003
     * allow styles to be used with capchk, if doing cows
 
