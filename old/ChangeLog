@@ -1,3 +1,10 @@
+8.3: Sat Jan 17 23:03:50 2004
+    * added -ansi flag to force ANSI output in cases where it is not
+      detected properly and tries to use irc colors
+    * default html colors has white foreground
+    * no warnings if $COWPATH isn't set
+    * no more Text::Wrap warnings
+
 8.2: Tue Jan 13 19:01:09 2004
     * If not Irssi, rainbow keepstate is down with a dotfile
     * Bugfix: HTML < and > entity escaping fixed
