@@ -1,3 +1,6 @@
+3.6: Mon Jul 21 14:13:42 2003
+    * fixed leading blank line in some figlets
+
 3.5: Sun Jul 20 13:49:21 2003
     * improve cowcut algorithm (colorize around -capchk bubbles)
 
