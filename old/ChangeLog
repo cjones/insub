@@ -1,3 +1,6 @@
+3.4: Sun Jul 20 13:35:41 2003
+    * allow styles to be used with capchk, if doing cows
+
 3.3: Sun Jul 20 13:00:55 2003
     * bugfix: don't use hardcoded cowpath :P
 
