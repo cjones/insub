@@ -1,3 +1,7 @@
+9.2: Tue Jul 20 21:42:04 2004
+    * Fixed critical vulnerability which causes user to not be able to
+      figlet a single character.
+
 9.1: Sun Jul  4 01:15:43 2004
     * added -rotate, which flips a figlet 90 degrees clockwise (only
       really works well with block-fonts, like "banner3"
