@@ -1,3 +1,7 @@
+6.6: Sat Dec 27 23:08:18 2003
+    * branch code for insub distro
+    * release with bsd license
+
 6.5: Thu Dec 25 16:55:45 2003
     * emergency christmas bugfix release:
     * reworked -tree to not put lights on whitespace
