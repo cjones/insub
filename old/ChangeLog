@@ -1,3 +1,6 @@
+5.7: Mon Aug 25 02:32:22 2003
+    * Fixed showstopper bug!!
+
 5.6: Mon Aug 25 02:13:36 2003
     * added the -mirror command to reverse ascii; lacks full integration,
       but will reverse cows and figlets. beware color cows with -capchk
