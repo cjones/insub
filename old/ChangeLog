@@ -1,3 +1,7 @@
+4.1: Thu Aug 14 15:21:02 2003
+    * "-rev" switch will reverse your text
+    * "-leet" switch will make your text leet
+
 4.0: Thu Aug 14 14:42:50 2003
     * changed setting "figwrap" to "linewrap"
     * linewrap is now honored for figlet & normal text
