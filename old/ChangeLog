@@ -1,3 +1,8 @@
+8.8: Wed Apr 28 22:52:36 2004
+    * add -bash flag to do escaping (see POD for details)
+    * bugfix: don't try utf8 in perl < 5.8
+    * begin POD, first item: bash escaping
+
 8.7: Mon Apr 26 12:56:43 2004
     * 8.7 changes submitted by j0no:
     * AOL Instant Messenger support.
