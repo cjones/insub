@@ -1,3 +1,24 @@
+12.0: Sat Jul 14 14:33:09 2007
+    * new flag -rain lets you specify a custom rainbow colormap. for
+      example -rain rrwwBB will cause the rainbow to be 3 bars of red, 3
+      bars of white, and 3 bars of bright blue
+    * new flag -skew lets you set how the rainbow get skewed each line.
+      default is 1 which causes the rainbow bars to appear diagonally
+      bottom-left to top-right. -1 would cause them to reverse directions.
+      higher skew values will create a sharper grade
+    * add -chalkboard flag, graphic of your text being written by bart
+    * remove annoying warning if you try to do too much figlet
+    * allow 5ms throttling
+    * fix bug with banner
+    * switch to GPL license
+    * autoflushing always on
+    * a bunch of code cleanup
+    * fix outdated contact info
+    * remove unsightly tab from usage menu
+    * completely redo the rainbow function
+    * updated the usage hints
+    * made help/colors/version/usage commands take a -
+
 11.0: Tue May 29 23:05:40 2007
 
 10.1: Wed Nov 22 14:50:12 2006
