@@ -1,3 +1,6 @@
+13.0: Mon Sep  1 12:51:39 2008
+    * fixed missing -3 (random) style for rainbow
+
 12.0: Sat Jul 14 14:33:09 2007
     * new flag -rain lets you specify a custom rainbow colormap. for
       example -rain rrwwBB will cause the rainbow to be 3 bars of red, 3
