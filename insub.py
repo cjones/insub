@@ -153,7 +153,6 @@ def filter(*args, **kwargs):
     def decorator(func):
 
         def inner(*args, **kwargs):
-            print '%s called' % func.func_name
             return func(*args, **kwargs)
 
         inner.__doc__ = func.__doc__
@@ -223,8 +222,7 @@ class Insub(object):
     @filter()
     def uniflip(self, lines):
         """Unicode flip"""
-        line = self.mirror(lines)
-        for line in lines:
+        for line in self.mirror(lines):
             for key, val in FLIP_TABLE:
                 line = line.replace(key, val)
             yield line
@@ -249,7 +247,6 @@ class Insub(object):
     @filter()
     def mirror(self, lines):
         """Reverse lines left-to-right"""
-        print 'called with: %s' % repr(lines)
         lines = list(lines)
         size = max(map(len, lines))
         for line in lines:
