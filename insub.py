@@ -34,10 +34,57 @@ from optparse import OptionParser
 import os
 from subprocess import Popen, PIPE, STDOUT
 import shlex
+import random
 
 __version__ = '0.1'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
+
+# defaults
+SPOOKWORDS = 5
+
+# list of spook words, stolen from emacs
+SPOOK_PHRASES = (
+        '$400 million in gold bullion',
+        '[Hello to all my fans in domestic surveillance]', 'AK-47',
+        'ammunition', 'arrangements', 'assassination', 'BATF', 'bomb', 'CIA',
+        'class struggle', 'Clinton', 'Cocaine', 'colonel',
+        'counter-intelligence', 'cracking', 'Croatian', 'cryptographic',
+        'Delta Force', 'DES', 'domestic disruption', 'explosion', 'FBI', 'FSF',
+        'fissionable', 'Ft. Bragg', 'Ft. Meade', 'genetic', 'Honduras',
+        'jihad', 'Kennedy', 'KGB', 'Khaddafi', 'kibo', 'Legion of Doom',
+        'Marxist', 'Mossad', 'munitions', 'Nazi', 'Noriega', 'North Korea',
+        'NORAD', 'NSA', 'nuclear', 'Ortega', 'Panama', 'Peking', 'PLO',
+        'plutonium', 'Qaddafi', 'quiche', 'radar', 'Rule Psix',
+        'Saddam Hussein', 'SDI', 'SEAL Team 6', 'security', 'Semtex',
+        'Serbian', 'smuggle', 'South Africa', 'Soviet ', 'spy', 'strategic',
+        'supercomputer', 'terrorist', 'Treasury', 'Uzi', 'Waco, Texas',
+        'World Trade Center', 'Liberals', 'Cheney', 'Eggs', 'Libya', 'Bush',
+        'Kill the president', 'GOP', 'Republican', 'Shiite', 'Muslim',
+        'Chemical Ali', 'Ashcroft', 'Terrorism', 'Al Qaeda', 'Al Jazeera',
+        'Hamas', 'Israel', 'Palestine', 'Arabs', 'Arafat', 'Patriot Act',
+        'Voter Fraud', 'Punch-cards', 'Diebold', 'conspiracy', 'Fallujah',
+        'IndyMedia', 'Skull and Bones', 'Free Masons', 'Kerry', 'Grass Roots',
+        '9-11', 'Rocket Propelled Grenades', 'Embedded Journalism',
+        'Lockheed-Martin', 'war profiteering', 'Kill the President',
+        'anarchy', 'echelon', 'nuclear', 'assassinate', 'Roswell', 'Waco',
+        'World Trade Center', 'Soros', 'Whitewater', 'Lebed', 'HALO',
+        'Spetznaz', 'Al Amn al-Askari', 'Glock 26', 'Steak Knife', 'Rewson',
+        'SAFE', 'Waihopai', 'ASPIC', 'MI6', 'Information Security',
+        'Information Warfare', 'Privacy', 'Information Terrorism',
+        'Terrorism', 'Defensive Information', 'Defense Information Warfare',
+        'Offensive Information', 'Offensive Information Warfare',
+        'Ortega Waco', 'assasinate', 'National Information Infrastructure',
+        'InfoSec', 'Computer Terrorism', 'DefCon V', 'Encryption', 'Espionage',
+        'NSA', 'CIA', 'FBI', 'White House', 'Undercover', 'Compsec 97',
+        'Europol', 'Military Intelligence', 'Verisign', 'Echelon',
+        'Ufologico Nazionale', 'smuggle', 'Bletchley Park', 'Clandestine',
+        'Counter Terrorism Security', 'Enemy of the State', '20755-6000',
+        'Electronic Surveillance', 'Counterterrorism', 'eavesdropping',
+        'nailbomb', 'Satellite imagery', 'subversives', 'World Domination',
+        'wire transfer', 'jihad', 'fissionable', "Sayeret Mat'Kal",
+        'HERF pipe-bomb', '2.3 Oz.  cocaine')
+
 
 class Insub(object):
 
@@ -62,6 +109,8 @@ class Insub(object):
         def __call__(self, func):
             self.__class__.filters.append((func, self.options))
             return func
+
+    # filters that control the source text
 
     @filter()
     def ver(self, lines):
@@ -95,9 +144,19 @@ class Insub(object):
                 for line in fp:
                     yield line.rstrip()
 
-    @filter()
+    # dest metavar default action type nargs const choices callback help
+    # store[_(const|true|false)] append[_const] count callback
+    # string int long float complex choice
+
+    @filter(spookwords=dict(metavar='<#>', default=SPOOKWORDS, type='int',
+                            help='spook words to use (default: %default)'))
     def spook(self, lines):
-        return lines
+        for line in lines:
+            yield ' '.join(
+                    [' '.join(random.sample(SPOOK_PHRASES, self.spookwords)),
+                     line])
+
+    # filters that change the text content
 
     @filter()
     def jive(self, lines):
@@ -118,6 +177,8 @@ class Insub(object):
     @filter()
     def jigs(self, lines):
         return lines
+
+    # change the text appearance
 
     @filter()
     def sine(self, lines):
@@ -159,6 +220,8 @@ class Insub(object):
     def chalkboard(self, lines):
         return lines
 
+    # change the text presentation
+
     @filter()
     def checker(self, lines):
         return lines
@@ -175,6 +238,8 @@ class Insub(object):
     def outline(self, lines):
         return lines
 
+    # change the final visual appearance
+
     @filter()
     def rainbow(self, lines):
         return lines
@@ -187,6 +252,8 @@ class Insub(object):
     def blink(self, lines):
         return lines
 
+    # ircii jukes
+
     @filter()
     def ircii_fake(self, lines):
         return lines
@@ -195,6 +262,8 @@ class Insub(object):
     def ircii_drop(self, lines):
         return lines
 
+    # post-processing filters
+
     @filter()
     def prefix(self, lines):
         return lines
@@ -202,6 +271,8 @@ class Insub(object):
     @filter()
     def strip(self, lines):
         return lines
+
+    # misc utility functions/properties
 
     @property
     def name(self):
