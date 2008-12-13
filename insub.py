@@ -26,10 +26,14 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""Suite of text filters"""
+"""Suite of text filters to annoy people on IRC"""
 
+from __future__ import with_statement
 import sys
 from optparse import OptionParser
+import os
+from subprocess import Popen, PIPE, STDOUT
+import shlex
 
 __version__ = '0.1'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
@@ -37,13 +41,13 @@ __all__ = ['Insub']
 
 class Insub(object):
 
-    """Suite of text filters"""
+    """Suite of text filters to annoy people on IRC"""
 
     def __init__(self, **opts):
         self.__dict__.update(opts)
 
-    def process(self, data):
-        lines = data.splitlines()
+    def process(self):
+        lines = self.data.splitlines()
         for filter in self.filters:
             lines = filter(self, lines)
         return '\n'.join(lines)
@@ -61,19 +65,35 @@ class Insub(object):
 
     @filter()
     def ver(self, lines):
-        return lines
+        """Display our version"""
+        yield '%s %s' % (self.name, __version__)
+        for line in lines:
+            yield line
 
     @filter()
     def stdin(self, lines):
-        return lines
+        """Add input from STDIN to data to process"""
+        for line in sys.stdin:
+            yield line
+        for line in lines:
+            yield line
 
     @filter()
     def execute(self, lines):
-        return lines
+        """Execute args and add data to the output"""
+        for line in lines:
+            cmd = shlex.split(line)
+            process = Popen(cmd, stdout=PIPE, stderr=STDOUT)
+            for line in process.stdout:
+                yield line.rstrip()
 
     @filter()
     def slurp(self, lines):
-        return lines
+        """Read from files specified in args and add data to output"""
+        for line in lines:
+            with open(line, 'r') as fp:
+                for line in fp:
+                    yield line.rstrip()
 
     @filter()
     def spook(self, lines):
@@ -183,6 +203,10 @@ class Insub(object):
     def strip(self, lines):
         return lines
 
+    @property
+    def name(self):
+        return os.path.basename(sys.argv[0])
+
 
 def main():
     # dest metavar default action type nargs const choices callback help
@@ -201,11 +225,14 @@ def main():
             parser.add_option('--' + option, **kwargs)
     opts, args = parser.parse_args()
 
-    # put in their natural order
+    # put filters in their natural order
     opts.filters = []
     for func, options in Insub.filter.filters:
         if func in filters and func not in opts.filters:
             opts.filters.append(func)
+
+    # any data provided on the command-line
+    opts.data = ' '.join(args)
 
     # process data
     insub = Insub(**opts.__dict__)
