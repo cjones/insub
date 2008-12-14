@@ -50,6 +50,8 @@ NON_ORDERED = False
 SINE_HEIGHT = 5
 SINE_FREQ = .3
 SINE_BG = ' '
+MATRIX_SIZE = 6
+MATRIX_SPACING = 2
 
 try:
     INPUT_ENCODING = codecs.lookup(sys.stdin.encoding).name
@@ -391,12 +393,10 @@ class Insub(object):
             width = len(line) * self.sine_freq
             plot = {}
             x = 0
-
             for ch in line:
                 y = int(self.sine_height * math.sin(x)) + self.sine_height
                 plot.setdefault('%.2f' % x, {})[y] = ch
                 x += self.sine_freq
-
             for y in xrange(self.sine_height * 2 + 1):
                 x = 0
                 while x <= width:
@@ -407,7 +407,6 @@ class Insub(object):
                         out[line_num] += self.sine_bg
                     x += self.sine_freq
                 line_num += 1
-
         bg_re = re.compile('^' + re.escape(self.sine_bg) + '+$')
         for i, line in sorted(out.iteritems()):
             if not bg_re.search(line):
@@ -415,15 +414,35 @@ class Insub(object):
 
     @filter()
     def diagonal(self, lines):
-        return lines
+        """Arrange text diagonally"""
+        for line in lines:
+            for i in xrange(len(line)):
+                yield ' ' * i + line[i]
 
     @filter()
-    def popeye(self, lines):
-        return lines
+    def slope(self, lines):
+        """Arrange text on a slope"""
+        for line in lines:
+            spacer = 0
+            for word in line.split():
+                yield ' ' * spacer + word
+                spacer += len(word)
 
-    @filter()
+    @filter(matrix_size=dict(metavar='<int>', default=MATRIX_SIZE, type='int',
+                             help='matrix size (default: %default)'),
+            matrix_spacing=dict(metavar='<int>', default=MATRIX_SPACING,
+                                type='int',
+                                help='matrix spacing (default: %default)'))
     def matrix(self, lines):
-        return lines
+        """Arrange text in a matrix"""
+        data = ' '.join(lines)
+        out = defaultdict(unicode)
+        for i in xrange(0, len(data), self.matrix_size):
+            chunk = data[i:i + self.matrix_size]
+            for j in xrange(len(chunk)):
+                out[j] += chunk[j] + ' ' * self.matrix_spacing
+        for i, line in sorted(out.iteritems()):
+            yield line
 
     @filter()
     def figlet(self, lines):
