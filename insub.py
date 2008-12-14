@@ -233,6 +233,12 @@ LEET_MAP = dict(a=['4', '/\\', '@', 'a', 'A'],
                 y=['y', 'Y'],
                 z=['z', 'Z', '5'])
 
+# translation map for jigs
+JIGS_MAP = {34: 104, 44: 46, 45: 61, 46: 47, 47: 110, 48: 45, 55: 56, 56: 57,
+            57: 48, 59: 39, 61: 55, 91: 93, 92: 117, 93: 92, 104: 106,
+            105: 111, 106: 107, 107: 108, 108: 59, 109: 46, 110: 109,
+            111: 112, 112: 91, 117: 105, 121: 117}
+
 
 class Insub(object):
 
@@ -359,7 +365,9 @@ class Insub(object):
 
     @filter()
     def jigs(self, lines):
-        return lines
+        """Shift left-hand homerow to the right"""
+        for line in lines:
+            yield line.translate(JIGS_MAP)
 
     # change the text appearance
 
