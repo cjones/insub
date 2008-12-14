@@ -52,6 +52,8 @@ SINE_FREQ = .3
 SINE_BG = ' '
 MATRIX_SIZE = 6
 MATRIX_SPACING = 2
+HUG_SIZE = 5
+HUG_CHARS = '{', '}'
 
 try:
     INPUT_ENCODING = codecs.lookup(sys.stdin.encoding).name
@@ -372,7 +374,7 @@ class Insub(object):
 
     @filter()
     def jigs(self, lines):
-        """Shift left-hand homerow to the right"""
+        """Shift right-hand homerow to the right"""
         for line in lines:
             yield line.translate(JIGS_MAP)
 
@@ -446,15 +448,30 @@ class Insub(object):
 
     @filter()
     def figlet(self, lines):
+        # XXX complicated
         return lines
 
     @filter()
     def banner(self, lines):
+        # XXX complicated
         return lines
 
-    @filter()
+    # dest metavar default action type nargs const choices callback help
+    # store[_(const|true|false)] append[_const] count callback
+    # string int long float complex choice
+
+    @filter(hug_size=dict(metavar='<int>', default=HUG_SIZE, type='int',
+                          help='default: %default'),
+            hug_chars=dict(metavar='<left> <right>', default=HUG_CHARS, nargs=2,
+                           help='default: %s' % repr(HUG_CHARS)))
     def hug(self, lines):
-        return lines
+        """Add hugs around the text"""
+        lines = list(lines)
+        size = len(max(lines, key=len))
+        left = self.hug_chars[0] * self.hug_size
+        right = self.hug_chars[1] * self.hug_size
+        for line in lines:
+            yield '%s %s %s' % (left, line.center(size), right)
 
     @filter()
     def rotate(self, lines):
