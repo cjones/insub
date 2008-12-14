@@ -29,12 +29,13 @@
 """Suite of text filters to annoy people on IRC"""
 
 from __future__ import with_statement
-import sys
-from optparse import OptionParser
-import os
 from subprocess import Popen, PIPE, STDOUT
+from optparse import OptionParser
 import shlex
 import random
+import codecs
+import sys
+import os
 
 __version__ = '0.1'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
@@ -42,6 +43,16 @@ __all__ = ['Insub']
 
 # defaults
 SPOOKWORDS = 5
+
+try:
+    INPUT_ENCODING = codecs.lookup(sys.stdin.encoding).name
+except:
+    INPUT_ENCODING = sys.getdefaultencoding()
+
+try:
+    OUTPUT_ENCODING = codecs.lookup(sys.stdout.encoding).name
+except:
+    OUTPUT_ENCODING = sys.getdefaultencoding()
 
 # list of spook words, stolen from emacs
 SPOOK_PHRASES = (
@@ -55,9 +66,9 @@ SPOOK_PHRASES = (
         'jihad', 'Kennedy', 'KGB', 'Khaddafi', 'kibo', 'Legion of Doom',
         'Marxist', 'Mossad', 'munitions', 'Nazi', 'Noriega', 'North Korea',
         'NORAD', 'NSA', 'nuclear', 'Ortega', 'Panama', 'Peking', 'PLO',
-        'plutonium', 'Qaddafi', 'quiche', 'radar', 'Rule Psix',
+        'plutonium', 'Qaddafi', 'quiche', 'radar', 'Rule Psix', 'spy',
         'Saddam Hussein', 'SDI', 'SEAL Team 6', 'security', 'Semtex',
-        'Serbian', 'smuggle', 'South Africa', 'Soviet ', 'spy', 'strategic',
+        'Serbian', 'smuggle', 'South Africa', 'Soviet Union', 'strategic',
         'supercomputer', 'terrorist', 'Treasury', 'Uzi', 'Waco, Texas',
         'World Trade Center', 'Liberals', 'Cheney', 'Eggs', 'Libya', 'Bush',
         'Kill the president', 'GOP', 'Republican', 'Shiite', 'Muslim',
@@ -85,6 +96,17 @@ SPOOK_PHRASES = (
         'wire transfer', 'jihad', 'fissionable', "Sayeret Mat'Kal",
         'HERF pipe-bomb', '2.3 Oz.  cocaine')
 
+# translation map for unicode upsidedownation
+UNIFLIP = {8255: 8256, 8261: 8262, 33: 161, 34: 8222, 38: 8523, 39: 44, 40: 41,
+           41: 40, 46: 729, 51: 400, 52: 5421, 54: 57, 55: 11362, 8756: 8757,
+           59: 1563, 60: 62, 63: 191, 65: 8704, 67: 8579, 68: 9686, 69: 398,
+           70: 8498, 71: 8513, 74: 383, 75: 8906, 76: 8514, 77: 87, 78: 7438,
+           80: 1280, 81: 908, 82: 7450, 84: 8869, 85: 8745, 86: 7463,89: 8516,
+           91: 93, 95: 8254, 97: 592, 98: 113, 99: 596, 100: 112, 101: 477,
+           102: 607, 103: 387, 104: 613, 105: 305, 106: 638, 107: 670,
+           108: 643, 109: 623, 110: 117, 114: 633, 116: 647, 118: 652,
+           119: 653, 121: 654, 123: 125}
+
 
 class Insub(object):
 
@@ -97,7 +119,7 @@ class Insub(object):
         lines = self.data.splitlines()
         for filter in self.filters:
             lines = filter(self, lines)
-        return '\n'.join(lines)
+        return u'\n'.join(lines)
 
     class filter(object):
 
@@ -115,7 +137,7 @@ class Insub(object):
     @filter()
     def ver(self, lines):
         """Display our version"""
-        yield '%s %s' % (self.name, __version__)
+        yield u'%s %s' % (self.name, __version__)
         for line in lines:
             yield line
 
@@ -123,7 +145,7 @@ class Insub(object):
     def stdin(self, lines):
         """Add input from STDIN to data to process"""
         for line in sys.stdin:
-            yield line
+            yield line.rstrip().decode(INPUT_ENCODING, 'replace')
         for line in lines:
             yield line
 
@@ -131,10 +153,11 @@ class Insub(object):
     def execute(self, lines):
         """Execute args and add data to the output"""
         for line in lines:
+            line = line.encode(OUTPUT_ENCODING, 'replace')
             cmd = shlex.split(line)
             process = Popen(cmd, stdout=PIPE, stderr=STDOUT)
             for line in process.stdout:
-                yield line.rstrip()
+                yield line.rstrip().decode(INPUT_ENCODING, 'replace')
 
     @filter()
     def slurp(self, lines):
@@ -142,19 +165,21 @@ class Insub(object):
         for line in lines:
             with open(line, 'r') as fp:
                 for line in fp:
-                    yield line.rstrip()
-
-    # dest metavar default action type nargs const choices callback help
-    # store[_(const|true|false)] append[_const] count callback
-    # string int long float complex choice
+                    yield line.rstrip().decode(INPUT_ENCODING, 'replace')
 
     @filter(spookwords=dict(metavar='<#>', default=SPOOKWORDS, type='int',
                             help='spook words to use (default: %default)'))
     def spook(self, lines):
-        for line in lines:
-            yield ' '.join(
-                    [' '.join(random.sample(SPOOK_PHRASES, self.spookwords)),
-                     line])
+        """Get NSA's attention"""
+        lines = list(lines)
+        if not lines:
+            yield self._get_spook()
+        else:
+            for line in lines:
+                yield u' '.join([self._get_spook(), line])
+
+    def _get_spook(self):
+        return u' '.join(random.sample(SPOOK_PHRASES, self.spookwords))
 
     # filters that change the text content
 
@@ -171,8 +196,18 @@ class Insub(object):
         return lines
 
     @filter()
-    def reverse(self, lines):
-        return lines
+    def uniflip(self, lines):
+        """Reverse text using unicode flippage"""
+        for line in self.mirror(lines):
+            yield line.translate(UNIFLIP)
+
+    @filter()
+    def mirror(self, lines):
+        """Mirror image text"""
+        lines = list(lines)
+        size = len(max(lines, key=len))
+        for line in lines:
+            yield u' ' * (size - len(line)) + u''.join(reversed(line))
 
     @filter()
     def jigs(self, lines):
@@ -283,9 +318,12 @@ def main():
     # dest metavar default action type nargs const choices callback help
     # store[_(const|true|false)] append[_const] count callback
     # string int long float complex choice
+    parser = OptionParser(version=__version__)
+
+    # static options
+    # XXX no-reordering, both encodings
 
     # add filter options to arg parser
-    parser = OptionParser(version=__version__)
     filters = []
     add_filter = lambda option, key, val, parser, func: filters.append(func)
     for func, options in Insub.filter.filters:
@@ -303,11 +341,11 @@ def main():
             opts.filters.append(func)
 
     # any data provided on the command-line
-    opts.data = ' '.join(args)
+    opts.data = u' '.join(arg.decode(INPUT_ENCODING, 'replace') for arg in args)
 
     # process data
     insub = Insub(**opts.__dict__)
-    print insub.process()
+    print insub.process().encode(OUTPUT_ENCODING, 'replace')
 
     return 0
 
