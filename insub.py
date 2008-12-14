@@ -30,10 +30,12 @@
 
 from __future__ import with_statement
 from subprocess import Popen, PIPE, STDOUT
+from collections import defaultdict
 from optparse import OptionParser
 import shlex
 import random
 import codecs
+import math
 import sys
 import os
 import re
@@ -45,6 +47,9 @@ __all__ = ['Insub']
 # defaults
 SPOOKWORDS = 5
 NON_ORDERED = False
+SINE_HEIGHT = 5
+SINE_FREQ = .3
+SINE_BG = ' '
 
 try:
     INPUT_ENCODING = codecs.lookup(sys.stdin.encoding).name
@@ -371,9 +376,42 @@ class Insub(object):
 
     # change the text appearance
 
-    @filter()
+    @filter(sine_height=dict(metavar='<int>', default=SINE_HEIGHT, type='int',
+                             help='height of wave (default: %default)'),
+            sine_freq=dict(metavar='<float>', default=SINE_FREQ, type='float',
+                           help='wave frequency (default: %default)'),
+            sine_bg=dict(metavar='<str>', default=SINE_BG,
+                                 help='sine background (default: %s)' %
+                                 repr(SINE_BG)))
     def sine(self, lines):
-        return lines
+        """Arrange text in a sine wave pattern"""
+        out = defaultdict(unicode)
+        line_num = 0
+        for line in lines:
+            width = len(line) * self.sine_freq
+            plot = {}
+            x = 0
+
+            for ch in line:
+                y = int(self.sine_height * math.sin(x)) + self.sine_height
+                plot.setdefault('%.2f' % x, {})[y] = ch
+                x += self.sine_freq
+
+            for y in xrange(self.sine_height * 2 + 1):
+                x = 0
+                while x <= width:
+                    xrep = '%.2f' % x
+                    if xrep in plot and y in plot[xrep]:
+                        out[line_num] += plot[xrep][y]
+                    else:
+                        out[line_num] += self.sine_bg
+                    x += self.sine_freq
+                line_num += 1
+
+        bg_re = re.compile('^' + re.escape(self.sine_bg) + '+$')
+        for i, line in sorted(out.iteritems()):
+            if not bg_re.search(line):
+                yield line
 
     @filter()
     def diagonal(self, lines):
