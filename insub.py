@@ -36,6 +36,7 @@ import random
 import codecs
 import sys
 import os
+import re
 
 __version__ = '0.1'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
@@ -43,6 +44,7 @@ __all__ = ['Insub']
 
 # defaults
 SPOOKWORDS = 5
+NON_ORDERED = False
 
 try:
     INPUT_ENCODING = codecs.lookup(sys.stdin.encoding).name
@@ -96,7 +98,7 @@ SPOOK_PHRASES = (
         'wire transfer', 'jihad', 'fissionable', "Sayeret Mat'Kal",
         'HERF pipe-bomb', '2.3 Oz.  cocaine')
 
-# translation map for unicode upsidedownation
+# translation map for unicode upsidedown-ation
 UNIFLIP = {8255: 8256, 8261: 8262, 33: 161, 34: 8222, 38: 8523, 39: 44, 40: 41,
            41: 40, 46: 729, 51: 400, 52: 5421, 54: 57, 55: 11362, 8756: 8757,
            59: 1563, 60: 62, 63: 191, 65: 8704, 67: 8579, 68: 9686, 69: 398,
@@ -106,6 +108,130 @@ UNIFLIP = {8255: 8256, 8261: 8262, 33: 161, 34: 8222, 38: 8523, 39: 44, 40: 41,
            102: 607, 103: 387, 104: 613, 105: 305, 106: 638, 107: 670,
            108: 643, 109: 623, 110: 117, 114: 633, 116: 647, 118: 652,
            119: 653, 121: 654, 123: 125}
+
+# lexical translation rules for jive, ported from jive.c
+JIVE_RULES = [
+        ('file', 'stash'), ('send', "t'row"), ('program', 'honky code'),
+        ('atlas', 'Isaac'), ('unix', 'slow mo-fo'), ('UNIX', 'dat slow mo-fo'),
+        ('linux', 'dat leenucks mo-fo'), ('Linux', 'penguin unix'),
+        ('LINUX', 'dat fast mo-fo'), (' takes ', " snatch'd "),
+        (' take ', ' snatch '), ('Mexican', 'wet-back'),
+        ('mexican', 'wet-back'), ('Italian', 'greaser'),
+        ('italian', 'greaser'), ("don't", "duzn't"), ('Jive', 'Ebonics'),
+        ('jive', 'JIBE'), ('[Ee]nglish', 'honky talk'), ('fool', 'honkyfool'),
+        ('modem', 'doodad'), ('e the ', 'e da damn '),
+        ('a the ', 'a da damn '), ('t the ', 't da damn '),
+        ('d the ', 'd da damn '), (' man ', ' dude '), ('woman', 'mama'),
+        ('women', 'honky chicks'), (' men ', ' dudes '), (' mens ', ' dudes '),
+        ('girl', 'goat'), ('something', "sump'n"), (' lie ', ' honky jibe '),
+        ('-o-', ' -on rebound- '), ('-oo-', " -check y'out latah-"),
+        ('([a-b]\\.)', '\\1  Sheeeiit.'),
+        ('([e-f]\\.)', '\\1  What it is, Mama!'),
+        ('([i-j]\\.)', "\\1  Ya' know?"),
+        ('([m-n]\\.)', "\\1  S coo', bro."),
+        ('([q-r]\\.)', '\\1  Ah be baaad...'),
+        ('([u-v]\\.)', '\\1  Man!'),
+        ('([y-z]\\.)', '\\1  Slap mah fro!'),
+        ('Sure', "Sho' nuff"), ('sure', "sho' nuff"), (' get', ' git'),
+        ('will take', "gots'ta snatch"), ('will have', "gots'ta"),
+        ('will ', "gots'ta "), ('got to', "gots'ta"),
+        ('I am', "I's gots'ta be"), ("I'm", "I's"), ('am not', 'aint'),
+        ('is not', 'aint'), ('are not', 'aint'), (' are your', " is yo'"),
+        (' are you', ' you is'), (' hat ', ' fedora '), (' shoe', ' kicker'),
+        ("haven't", 'aint'), ('have to', "gots'ta"), ('have', "gots'"),
+        (' has', " gots'ta"), ('come over', 'mosey on down'),
+        (' come ', ' mosey on down '), ('!', '.  Right On!  '),
+        ('buy', 'steal'), (' car ', ' wheels '), ('drive', 'roll'),
+        (' eat ', ' feed da bud '), (' black', ' brother'),
+        (' negro', ' brother'), ('white ', 'honky'), (' nigger', ' gentleman'),
+        ('nice', "supa' fine"), ('person', "sucka'"),
+        (' thing', ' wahtahmellun'), ('home', 'plantation'),
+        ('name', 'dojigger'), ('NAME', 'DOJIGGER'), ('syn', 'sin'),
+        ('SYN', 'SIN'), (' path', ' alley'), ('computer', 'clunker'),
+        ('or', "o'"), ('killed', 'wasted'), ('kill', 'put de smack down on'),
+        ('kill you', "put de smack down on yo' ass"), ('heroin', 'smack'),
+        ('marijuana', 'mary jane'), ('cocaine', 'cracker crack'),
+        ('president', 'super-dude'), ('prime minister', 'super honcho'),
+        ('injured', 'hosed'), ('government', "guv'ment"),
+        ('knew', 'knowed'), ('because', "a'cuz"), ('Because', "A'cuz"),
+        ('your', "yo'"), ('Your', "Yo'"), ('four', 'foe'), ('got', 'gots'),
+        ("aren't", "ain't"), ('young', 'yung'), ('you', "ya'"),
+        ('You', "You's"), ('first', 'fust'), ('police', 'honky pigs'),
+        (' string', " chittlin'"), (' read', ' eyeball'),
+        ('write', 'scribble'), ('th', 'd'), ('Th', 'D'), ('ing', "in'"),
+        (' a ', ' some '), (' an ', ' some '), (' to ', " t'"),
+        ('tion', 'shun'), ('TION', 'SHUN'), (' almost ', " mos' "),
+        (' from', ' fum'), (' because ', " cuz' "), ("you're'", 'youse'),
+        ("You're", 'Youse'), ('alright', "coo'"), ('okay', "coo'"),
+        ('er ', "a' "), ('known', 'knode'), ('want', "wants'"),
+        ('beat', "whup'"), ('exp', "'sp"), ('exs', "'s"), (' exc', " 's"),
+        (' ex', " 'es"), ('like', 'likes'), ('did', 'dun did'),
+        ('kind of', "kind'a"), ('dead', 'wasted'), ('good', 'baaaad'),
+        ('open ', 'jimmey '), ('opened ', "jimmey'd "), (' very', ' real'),
+        ('per', "puh'"), ('pera', "puh'"), ('oar', "o'"), (' can', ' kin'),
+        ('just ', 'plum '), ('detroit', 'Mo-town'),
+        ('western electric', "da' cave"), (' believe', " recon'"),
+        ('[Ii]ndianapolis', 'Nap-town'), (' [Jj]ack', ' Buckwheat'),
+        (' [Bb]ob ', " Liva' Lips "), (' [Pp]hil ', ' dat fine soul '),
+        (' [Mm]ark ', ' Amos '), ('[Rr]obert', 'Leroy'),
+        ('[Ss]andy', 'dat fine femahnaine ladee'), ('[Jj]ohn ', "Raz'tus "),
+        (' [Pp]aul', " Fuh'rina"), ('[Rr]eagan', 'Kingfish'),
+        ('[Dd]avid', 'Issac'), ('[Rr]onald', 'Rolo'),
+        (' [Jj]im ', ' Bo-Jangles '), (' [Mm]ary', ' Snow Flake'),
+        ('[Ll]arry', 'Remus'), ('[Jj]oe', "Massa'"), ('[Jj]oseph', "Massa'"),
+        ('mohammed', "liva' lips"), ('pontiff', "wiz'"), ('pope', "wiz'"),
+        ('pravda', 'dat commie rag'), ('broken', "bugger'd"),
+        ('strange ', 'funky '), ('dance ', 'boogy '), (' house', ' crib'),
+        ('ask', "ax'"), (' so ', " so's "), ('head', "'haid"),
+        ('boss', 'main man'), ('wife', 'mama'), ('people', "sucka's"),
+        ('money', "bre'd"), ('([a-z]:)', '\\1 dig dis:'),
+        ('amateur', "begina'"), ('radio', "transista'"), (' of ', ' uh '),
+        ('what', 'whut'), ('does', 'duz'), ('was', 'wuz'), (' were', ' wuz'),
+        ('understand it', 'dig it'), ('understand', 'dig it'),
+        (' my', " mah'"), (' [Ii] ', " ah' "), ('meta', "meta-fuckin'"),
+        ('hair', 'fro'), ('talk', 'rap'), ('music', 'beat'),
+        ('basket', 'hoop'), ('football', 'ball'), ('friend', 'homey'),
+        ('school', 'farm'), ('want to', 'wanna'),
+        ('wants to', "be hankerin' aftah"), ('well', 'sheeit'),
+        ('Well', 'Sheeit'), ('big', 'big-ass'), ('bad', 'bad-ass'),
+        ('small', 'little-ass'), ('sort of', 'radical'),
+        (' is a ', ' be some '), (' is an ', ' be some '), (' is ', ' be '),
+        ("It's", 'It be'), ("it's", 'it be'), ('water', 'booze'),
+        ('book', "scribblin'"), ('magazine', 'issue of GQ'),
+        ('paper', 'sheet'), (' up ', ' down '), ('down', 'waaay down'),
+        ('break', 'boogie'), ('Hi', "'Sup, dude"), ('VAX', 'pink Cadillac')]
+
+# pre-compile regex for jive rules
+for i, rule in enumerate(JIVE_RULES):
+    JIVE_RULES[i] = (re.compile(rule[0]), rule[1])
+
+# leet speak character map
+LEET_MAP = dict(a=['4', '/\\', '@', 'a', 'A'],
+                b=['|o', 'b', 'B'],
+                c=['C', 'c', '<'],
+                d=['d', 'D', '|)'],
+                e=['e', 'E', '3'],
+                f=['f', 'F', '/='],
+                g=['g', 'G', '6'],
+                h=['h', 'H', '|-|'],
+                i=['i', 'I', '|', '1'],
+                j=['j', 'J'],
+                k=['keke', 'x', 'X', 'k', 'K', '|<'],
+                l=['l', 'L', '7', '|_'],
+                m=['|V|', '|\\/|', 'm', 'M'],
+                n=['n', 'N', '|\\|'],
+                o=['0', 'o', 'O', '()', '[]', '<>'],
+                p=['p', 'P', '9'],
+                q=['q', 'Q'],
+                r=['r', 'R'],
+                s=['s', 'S', '5'],
+                t=['t', 'T', '7'],
+                u=['|_|', 'u', 'U', '\\/'],
+                v=['v', 'V', '\\/'],
+                w=['w', 'W', 'uu', 'UU', 'uU', 'Uu', '\\/\\/'],
+                x=['x', 'X', '><'],
+                y=['y', 'Y'],
+                z=['z', 'Z', '5'])
 
 
 class Insub(object):
@@ -145,7 +271,7 @@ class Insub(object):
     def stdin(self, lines):
         """Add input from STDIN to data to process"""
         for line in sys.stdin:
-            yield line.rstrip().decode(INPUT_ENCODING, 'replace')
+            yield line.rstrip().decode(self.input_encoding, 'replace')
         for line in lines:
             yield line
 
@@ -153,19 +279,19 @@ class Insub(object):
     def execute(self, lines):
         """Execute args and add data to the output"""
         for line in lines:
-            line = line.encode(OUTPUT_ENCODING, 'replace')
+            line = line.encode(self.output_encoding, 'replace')
             cmd = shlex.split(line)
             process = Popen(cmd, stdout=PIPE, stderr=STDOUT)
             for line in process.stdout:
-                yield line.rstrip().decode(INPUT_ENCODING, 'replace')
+                yield line.rstrip().decode(self.input_encoding, 'replace')
 
     @filter()
     def slurp(self, lines):
-        """Read from files specified in args and add data to output"""
+        """Read from files and add data to output"""
         for line in lines:
             with open(line, 'r') as fp:
                 for line in fp:
-                    yield line.rstrip().decode(INPUT_ENCODING, 'replace')
+                    yield line.rstrip().decode(self.input_encoding, 'replace')
 
     @filter(spookwords=dict(metavar='<#>', default=SPOOKWORDS, type='int',
                             help='spook words to use (default: %default)'))
@@ -185,15 +311,37 @@ class Insub(object):
 
     @filter()
     def jive(self, lines):
-        return lines
+        """Make speech more funky"""
+        for line in lines:
+            for search, replace in JIVE_RULES:
+                line = search.sub(replace, line)
+            yield line
 
     @filter()
     def scramble(self, lines):
-        return lines
+        """Scramble inner letters of a word"""
+        for line in lines:
+            new = []
+            for word in line.split():
+                if len(word) > 4:
+                    word = list(word)
+                    first = word.pop(0)
+                    last = word.pop()
+                    random.shuffle(word)
+                    word = first + u''.join(word) + last
+                new.append(word)
+            yield ' '.join(new)
 
     @filter()
     def leet(self, lines):
-        return lines
+        """Make text into leet-speak"""
+        for line in lines:
+            new = []
+            for ch in line:
+                if ch in LEET_MAP:
+                    ch = random.choice(LEET_MAP[ch])
+                new.append(ch)
+            yield u''.join(new)
 
     @filter()
     def uniflip(self, lines):
@@ -321,7 +469,16 @@ def main():
     parser = OptionParser(version=__version__)
 
     # static options
-    # XXX no-reordering, both encodings
+    toggle = lambda x: ('store_%s' % (not x)).lower()
+    parser.add_option('-i', '--input-encoding', metavar='<encoding>',
+                      default=INPUT_ENCODING,
+                      help='input encoding (default: %default)')
+    parser.add_option('-o', '--output-encoding', metavar='<encoding>',
+                      default=OUTPUT_ENCODING,
+                      help='output encoding (default: %default)')
+    parser.add_option('-n', '--non-ordered', default=NON_ORDERED,
+                      action=toggle(NON_ORDERED),
+                      help="use order of filters supplied on commandline")
 
     # add filter options to arg parser
     filters = []
@@ -334,18 +491,22 @@ def main():
             parser.add_option('--' + option, **kwargs)
     opts, args = parser.parse_args()
 
-    # put filters in their natural order
-    opts.filters = []
-    for func, options in Insub.filter.filters:
-        if func in filters and func not in opts.filters:
-            opts.filters.append(func)
+    if opts.non_ordered:
+        opts.filters = filters
+    else:
+        # put filters in their natural order
+        opts.filters = []
+        for func, options in Insub.filter.filters:
+            if func in filters and func not in opts.filters:
+                opts.filters.append(func)
 
     # any data provided on the command-line
-    opts.data = u' '.join(arg.decode(INPUT_ENCODING, 'replace') for arg in args)
+    opts.data = u' '.join(arg.decode(opts.input_encoding, 'replace')
+                          for arg in args)
 
     # process data
     insub = Insub(**opts.__dict__)
-    print insub.process().encode(OUTPUT_ENCODING, 'replace')
+    print insub.process().encode(opts.output_encoding, 'replace')
 
     return 0
 
