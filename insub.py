@@ -55,6 +55,7 @@ MATRIX_SIZE = 6
 MATRIX_SPACING = 2
 HUG_SIZE = 5
 HUG_CHARS = '{', '}'
+OUTLINE_STYLE = 'box'
 
 # default encodings to use
 try:
@@ -278,9 +279,12 @@ class Insub(object):
 
     """Suite of text filters to annoy people on IRC"""
 
+    OUTLINE_STYLES = ('box', '3d', 'arrow')
+
     def __init__(self, **opts):
         self.__dict__.update(opts)
 
+        # XXX this could probably be very simplified
         # normalize filters
         filters = []
         for filter in self.filters:
@@ -556,10 +560,10 @@ class Insub(object):
         for i, line in sorted(new.iteritems(), key=lambda item: item[0]):
             yield line
 
-    @filter(metavar='<width>', type='int')
+    @filter(dest='wrap_width', metavar='<width>', type='int')
     def wrap(self, lines):
         """Wrap text"""
-        for line in textwrap.wrap(' '.join(lines), width=self.wrap):
+        for line in textwrap.wrap(' '.join(lines), width=self.wrap_width):
             yield line
 
     @filter()
@@ -588,7 +592,39 @@ class Insub(object):
         for line in reversed(lines):
             yield line
 
-    #@filter() def outline(self, lines): raise NotImplemented
+    @filter(outline_style=dict(metavar='<%s>' % '|'.join(OUTLINE_STYLES),
+                               default=OUTLINE_STYLE, type='choice',
+                               choices=OUTLINE_STYLES,
+                               help='Style to use (default: %default)'))
+    def outline(self, lines):
+        """Draw an outline around text"""
+        lines = list(lines)
+        size = len(max(lines, key=len))
+
+        # top part
+        if self.outline_style == 'arrow':
+            yield '\\' + 'v' * (size + 2) + '/'
+            left, right = '>', '<'
+        elif self.outline_style == 'box':
+            yield '+' + '-' * (size + 2) + '+'
+            left = right = '|'
+        elif self.outline_style == '3d':
+            yield '  ' + '_' * (size + 3)
+            yield ' /' + ' ' * (size + 2) + '/|'
+            yield '+' + '-' * (size + 2) + '+ |'
+            left, right = '|', '| |'
+
+        # text part
+        for line in lines:
+            yield '%s %s%s %s' % (left, line, ' ' * (size - len(line)), right)
+
+        # bottom part
+        if self.outline_style == 'arrow':
+            yield '/' + '^' * (size + 2) + '\\'
+        elif self.outline_style == 'box':
+            yield '+' + '-' * (size + 2) + '+'
+        elif self.outline_style == '3d':
+            yield '+' + '-' * (size + 2) + '+/'
 
     # change the final visual appearance
 
@@ -603,11 +639,11 @@ class Insub(object):
 
     # post-processing filters
 
-    @filter(metavar='<text>', type='string')
+    @filter(dest='prefix_string', metavar='<text>', type='string')
     def prefix(self, lines):
         """Append text to each line"""
         for line in lines:
-            yield self.prefix + line
+            yield self.prefix_string + line
 
     #@filter() def strip(self, lines): raise NotImplemented
 
