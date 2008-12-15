@@ -645,7 +645,13 @@ class Insub(object):
         for line in lines:
             yield self.prefix_string + line
 
-    #@filter() def strip(self, lines): raise NotImplemented
+    @filter()
+    def strip(self, lines):
+        """Remove empty lines and excess whitespace"""
+        for line in lines:
+            line = line.strip()
+            if line:
+                yield line
 
     # misc utility functions/properties
 
