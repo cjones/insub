@@ -57,6 +57,8 @@ HUG_SIZE = 5
 HUG_CHARS = '{', '}'
 OUTLINE_STYLE = 'box'
 BANNER_WIDTH = 50
+BANNER_FG = '#'
+BANNER_BG = ' '
 
 # default encodings to use
 try:
@@ -1260,23 +1262,30 @@ class Insub(object):
     #@filter() def figlet(self, lines): raise NotImplemented
 
     @filter(banner_width=dict(metavar='<int>', default=BANNER_WIDTH, type='int',
-                              help='Font width (default: %default)'))
+                              help='Font width (default: %default)'),
+            banner_fg=dict(metavar='<char>', default=BANNER_FG,
+                           help='Banner foreground (default: %s)' %
+                           repr(BANNER_FG)),
+            banner_bg=dict(metavar='<char>', default=BANNER_BG,
+                           help='Banner background (default: %s)' %
+                           repr(BANNER_BG)))
     def banner(self, lines):
         """Convert text to banner text"""
         output = []
+        newline = self.banner_bg * 132
         for ch in ' '.join(lines):
             if ch in BANNER_RULES:
-                line = list(' ' * 132)
+                line = list(newline)
                 i = 0
                 while i < len(BANNER_RULES[ch]):
                     x = BANNER_RULES[ch][i]
                     if x >= 128:
                         output += [''.join(line)] * (x & 63)
-                        line = list(' ' * 132)
+                        line = list(newline)
                         i += 1
                     else:
                         n = BANNER_RULES[ch][i + 1]
-                        line[x:x + n] = '#' * n
+                        line[x:x + n] = self.banner_fg * n
                         i += 2
 
         # scale font to width
@@ -1287,7 +1296,7 @@ class Insub(object):
                 for j, ch in enumerate(line):
                     if not j % scale:
                         scaled.append(ch)
-                yield ''.join(scaled)
+                yield u''.join(scaled)
 
     @filter(hug_size=dict(metavar='<int>', default=HUG_SIZE, type='int',
                           help='How many hugs (default: %default)'),
@@ -1358,28 +1367,28 @@ class Insub(object):
 
         # top part
         if self.outline_style == 'arrow':
-            yield '\\' + 'v' * (size + 2) + '/'
+            yield u'\\' + 'v' * (size + 2) + '/'
             left, right = '>', '<'
         elif self.outline_style == 'box':
-            yield '+' + '-' * (size + 2) + '+'
+            yield u'+' + '-' * (size + 2) + '+'
             left = right = '|'
         elif self.outline_style == '3d':
-            yield '  ' + '_' * (size + 3)
-            yield ' /' + ' ' * (size + 2) + '/|'
-            yield '+' + '-' * (size + 2) + '+ |'
+            yield u'  ' + '_' * (size + 3)
+            yield u' /' + ' ' * (size + 2) + '/|'
+            yield u'+' + '-' * (size + 2) + '+ |'
             left, right = '|', '| |'
 
         # text part
         for line in lines:
-            yield '%s %s%s %s' % (left, line, ' ' * (size - len(line)), right)
+            yield u'%s %s%s %s' % (left, line, ' ' * (size - len(line)), right)
 
         # bottom part
         if self.outline_style == 'arrow':
-            yield '/' + '^' * (size + 2) + '\\'
+            yield u'/' + '^' * (size + 2) + '\\'
         elif self.outline_style == 'box':
-            yield '+' + '-' * (size + 2) + '+'
+            yield u'+' + '-' * (size + 2) + '+'
         elif self.outline_style == '3d':
-            yield '+' + '-' * (size + 2) + '+/'
+            yield u'+' + '-' * (size + 2) + '+/'
 
     # change the final visual appearance
 
@@ -1396,9 +1405,15 @@ class Insub(object):
 
     @filter(dest='prefix_string', metavar='<text>', type='string')
     def prefix(self, lines):
-        """Append text to each line"""
+        """Prepend text to each line"""
         for line in lines:
             yield self.prefix_string + line
+
+    @filter(dest='postfix_string', metavar='<text>', type='string')
+    def postfix(self, lines):
+        """Append text to each line"""
+        for line in lines:
+            yield line + self.postfix_string
 
     @filter()
     def strip(self, lines):
