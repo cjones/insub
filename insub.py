@@ -274,12 +274,13 @@ CHALKBOARD = """ _____________________________________________________________
 |                                           \  <.__._-      \ |
 |___________________________________________ <//___.         ||"""
 
+# sort of self-explanatory
+OUTLINE_STYLES = ('box', '3d', 'arrow')
+
 
 class Insub(object):
 
     """Suite of text filters to annoy people on IRC"""
-
-    OUTLINE_STYLES = ('box', '3d', 'arrow')
 
     def __init__(self, **opts):
         self.__dict__.update(opts)
@@ -329,6 +330,7 @@ class Insub(object):
         def setup(cls, parser):
             """Construct options for optparse"""
             filters = []
+            group = parser.add_option_group('Filters')
 
             def add_filter(option, key, val, parser, func):
                 if val is not None:
@@ -346,9 +348,9 @@ class Insub(object):
                         extra_options.append(('--' + option, kwargs))
                     else:
                         filter_kwargs[option] = kwargs
-                parser.add_option('--' + func.__name__, **filter_kwargs)
+                group.add_option('--' + func.__name__, **filter_kwargs)
                 for opt, kwargs in extra_options:
-                    parser.add_option(opt, **kwargs)
+                    group.add_option(opt, **kwargs)
 
             return filters
 
