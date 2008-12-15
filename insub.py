@@ -32,6 +32,7 @@ from __future__ import with_statement
 from subprocess import Popen, PIPE, STDOUT
 from collections import defaultdict
 from optparse import OptionParser
+import textwrap
 import shlex
 import random
 import codecs
@@ -540,9 +541,11 @@ class Insub(object):
     def rotate(self, lines):
         return lines
 
-    @filter()
+    @filter(metavar='<width>', type='int')
     def wrap(self, lines):
-        return lines
+        """Wrap text"""
+        for line in textwrap.wrap(' '.join(lines), width=self.wrap):
+            yield line
 
     @filter()
     def chalkboard(self, lines):
