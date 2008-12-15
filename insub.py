@@ -118,6 +118,16 @@ UNIFLIP = {8255: 8256, 8261: 8262, 33: 161, 34: 8222, 38: 8523, 39: 44, 40: 41,
            108: 643, 109: 623, 110: 117, 114: 633, 116: 647, 118: 652,
            119: 653, 121: 654, 123: 125}
 
+# ascii flip map if unicode is too much awesome
+ASCIIFLIP = {47: 92, 92: 47,      # / <-> \
+             118: 94, 94: 118,    # v <-> ^
+             109: 119, 119: 109,  # m <-> w
+             86: 94,              # V  -> ^
+             77: 87, 87: 77,      # M <-> W
+             112: 98, 98: 112,    # p <-> b
+             45: 95, 95:45,       # - <-> _
+             39: 44, 44: 39}      # , <-> '
+
 # lexical translation rules for jive, ported from jive.c
 JIVE_RULES = [
         ('file', 'stash'), ('send', "t'row"), ('program', 'honky code'),
@@ -273,6 +283,10 @@ class Insub(object):
             self.__class__.filters.append((func, self.options))
             return func
 
+        @classmethod
+        def options(cls):
+            pass
+
     # filters that control the source text
 
     @filter()
@@ -361,8 +375,14 @@ class Insub(object):
     @filter()
     def uniflip(self, lines):
         """Reverse text using unicode flippage"""
-        for line in self.mirror(lines):
+        for line in lines:
             yield line.translate(UNIFLIP)
+
+    @filter()
+    def asciiflip(self, lines):
+        """Reverse text using ascii flippage"""
+        for line in lines:
+            yield line.translate(ASCIIFLIP)
 
     @filter()
     def mirror(self, lines):
@@ -456,10 +476,6 @@ class Insub(object):
         # XXX complicated
         return lines
 
-    # dest metavar default action type nargs const choices callback help
-    # store[_(const|true|false)] append[_const] count callback
-    # string int long float complex choice
-
     @filter(hug_size=dict(metavar='<int>', default=HUG_SIZE, type='int',
                           help='default: %default'),
             hug_chars=dict(metavar='<left> <right>', default=HUG_CHARS, nargs=2,
@@ -493,11 +509,19 @@ class Insub(object):
 
     @filter()
     def cow(self, lines):
+        # XXX this is complicated
         return lines
+
+    # dest metavar default action type nargs const choices callback help
+    # store[_(const|true|false)] append[_const] count callback
+    # string int long float complex choice
 
     @filter()
     def flip(self, lines):
-        return lines
+        """Flip over lines"""
+        lines = list(lines)
+        for line in reversed(lines):
+            yield line
 
     @filter()
     def outline(self, lines):
@@ -507,6 +531,7 @@ class Insub(object):
 
     @filter()
     def rainbow(self, lines):
+        # XXX this is complicated
         return lines
 
     @filter()
@@ -531,6 +556,7 @@ class Insub(object):
 
     @filter()
     def prefix(self, lines):
+        """Append text to each line"""
         return lines
 
     @filter()
