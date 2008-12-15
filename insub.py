@@ -46,15 +46,16 @@ __all__ = ['Insub']
 
 # defaults
 SPOOKWORDS = 5
-NON_ORDERED = False
+ORDERED = False
 SINE_HEIGHT = 5
-SINE_FREQ = .3
+SINE_FREQ = 0.3
 SINE_BG = ' '
 MATRIX_SIZE = 6
 MATRIX_SPACING = 2
 HUG_SIZE = 5
 HUG_CHARS = '{', '}'
 
+# default encodings to use
 try:
     INPUT_ENCODING = codecs.lookup(sys.stdin.encoding).name
 except:
@@ -266,13 +267,36 @@ class Insub(object):
     def __init__(self, **opts):
         self.__dict__.update(opts)
 
-    def process(self):
+        # normalize filters
+        filters = []
+        for filter in self.filters:
+            if not isinstance(filter, basestring):
+                filter = filter.__name__
+            filters.append(getattr(self, filter).im_func)
+        self.filters = filters
+
+        # unless specified otherwise, put filters into their natural order
+        if not self.ordered:
+            filters = []
+            for func, options in self.__class__.filter.filters:
+                if func in self.filters and func not in filters:
+                    filters.append(func)
+            self.filters = filters
+
+    @property
+    def rendered(self):
+        """Return rendered data"""
         lines = self.data.splitlines()
         for filter in self.filters:
             lines = filter(self, lines)
         return u'\n'.join(lines)
 
     class filter(object):
+
+        """
+        Decorator class to handle gluing filters to optparse and
+        preserving natural filter order.
+        """
 
         filters = []
 
@@ -284,8 +308,31 @@ class Insub(object):
             return func
 
         @classmethod
-        def options(cls):
-            pass
+        def setup(cls, parser):
+            """Construct options for optparse"""
+            filters = []
+
+            def add_filter(option, key, val, parser, func):
+                if val is not None:
+                    setattr(parser.values, option.dest, val)
+                filters.append(func)
+
+            for func, options in cls.filters:
+                filter_kwargs = dict(action='callback',
+                                     callback=add_filter,
+                                     callback_args=(func,),
+                                     help=func.__doc__)
+                extra_options = []
+                for option, kwargs in options.iteritems():
+                    if isinstance(kwargs, dict):
+                        extra_options.append(('--' + option, kwargs))
+                    else:
+                        filter_kwargs[option] = kwargs
+                parser.add_option('--' + func.__name__, **filter_kwargs)
+                for opt, kwargs in extra_options:
+                    parser.add_option(opt, **kwargs)
+
+            return filters
 
     # filters that control the source text
 
@@ -323,7 +370,7 @@ class Insub(object):
                     yield line.rstrip().decode(self.input_encoding, 'replace')
 
     @filter(spookwords=dict(metavar='<#>', default=SPOOKWORDS, type='int',
-                            help='spook words to use (default: %default)'))
+                            help='Spook words to use (default: %default)'))
     def spook(self, lines):
         """Get NSA's attention"""
         lines = list(lines)
@@ -401,11 +448,11 @@ class Insub(object):
     # change the text appearance
 
     @filter(sine_height=dict(metavar='<int>', default=SINE_HEIGHT, type='int',
-                             help='height of wave (default: %default)'),
+                             help='Height of wave (default: %default)'),
             sine_freq=dict(metavar='<float>', default=SINE_FREQ, type='float',
-                           help='wave frequency (default: %default)'),
+                           help='Wave frequency (default: %default)'),
             sine_bg=dict(metavar='<str>', default=SINE_BG,
-                                 help='sine background (default: %s)' %
+                                 help='Sine background (default: %s)' %
                                  repr(SINE_BG)))
     def sine(self, lines):
         """Arrange text in a sine wave pattern"""
@@ -451,10 +498,10 @@ class Insub(object):
                 spacer += len(word)
 
     @filter(matrix_size=dict(metavar='<int>', default=MATRIX_SIZE, type='int',
-                             help='matrix size (default: %default)'),
+                             help='Matrix size (default: %default)'),
             matrix_spacing=dict(metavar='<int>', default=MATRIX_SPACING,
                                 type='int',
-                                help='matrix spacing (default: %default)'))
+                                help='Matrix spacing (default: %default)'))
     def matrix(self, lines):
         """Arrange text in a matrix"""
         data = ' '.join(lines)
@@ -477,9 +524,9 @@ class Insub(object):
         return lines
 
     @filter(hug_size=dict(metavar='<int>', default=HUG_SIZE, type='int',
-                          help='default: %default'),
+                          help='How many hugs (default: %default)'),
             hug_chars=dict(metavar='<left> <right>', default=HUG_CHARS, nargs=2,
-                           help='default: %s' % repr(HUG_CHARS)))
+                           help='Hugs chars (default: %s)' % repr(HUG_CHARS)))
     def hug(self, lines):
         """Add hugs around the text"""
         lines = list(lines)
@@ -509,7 +556,7 @@ class Insub(object):
 
     @filter()
     def cow(self, lines):
-        # XXX this is complicated
+        # XXX complicated
         return lines
 
     @filter()
@@ -527,7 +574,7 @@ class Insub(object):
 
     @filter()
     def rainbow(self, lines):
-        # XXX this is complicated
+        # XXX complicated
         return lines
 
     @filter()
@@ -564,6 +611,7 @@ class Insub(object):
 
     @property
     def name(self):
+        """Name of the script"""
         return os.path.basename(sys.argv[0])
 
 
@@ -571,63 +619,28 @@ def main():
     # dest metavar default action type nargs const choices callback help
     # store[_(const|true|false)] append[_const] count callback
     # string int long float complex choice
-    parser = OptionParser(version=__version__)
-
-    # static options
     toggle = lambda x: ('store_%s' % (not x)).lower()
-    parser.add_option('-i', '--input-encoding', metavar='<encoding>',
+    parser = OptionParser(version=__version__)
+    parser.add_option('-I', '--input-encoding', metavar='<encoding>',
                       default=INPUT_ENCODING,
-                      help='input encoding (default: %default)')
-    parser.add_option('-o', '--output-encoding', metavar='<encoding>',
+                      help='Input encoding (default: %default)')
+    parser.add_option('-O', '--output-encoding', metavar='<encoding>',
                       default=OUTPUT_ENCODING,
-                      help='output encoding (default: %default)')
-    parser.add_option('-n', '--non-ordered', default=NON_ORDERED,
-                      action=toggle(NON_ORDERED),
-                      help="use order of filters supplied on commandline")
-
-    # add filter options to arg parser
-    # XXX this is overly complex and not quite flexible enough..
-    # i'd like to abstract this to the decorator class and just have it
-    # spit out Option objects
-    filters = []
-
-    def add_filter(option, key, val, parser, func):
-        if val is not None:
-            setattr(parser.values, option.dest, val)
-        filters.append(func)
-
-    for func, options in Insub.filter.filters:
-        filter_kwargs = dict(action='callback', callback=add_filter,
-                             callback_args=(func,), help=func.__doc__)
-        extra_options = []
-        for option, kwargs in options.iteritems():
-            if isinstance(kwargs, dict):
-                extra_options.append(('--' + option, kwargs))
-            else:
-                filter_kwargs[option] = kwargs
-        parser.add_option('--' + func.__name__, **filter_kwargs)
-        for opt, kwargs in extra_options:
-            parser.add_option(opt, **kwargs)
-
+                      help='Output encoding (default: %default)')
+    parser.add_option('-o', '--ordered', default=ORDERED,
+                      action=toggle(ORDERED), help='Preserve order of filters')
+    filters = Insub.filter.setup(parser)
     opts, args = parser.parse_args()
 
-    if opts.non_ordered:
-        opts.filters = filters
-    else:
-        # put filters in their natural order
-        opts.filters = []
-        for func, options in Insub.filter.filters:
-            if func in filters and func not in opts.filters:
-                opts.filters.append(func)
-
     # any data provided on the command-line
-    opts.data = u' '.join(arg.decode(opts.input_encoding, 'replace')
-                          for arg in args)
+    data = ' '.join(arg.decode(opts.input_encoding, 'replace') for arg in args)
 
     # process data
-    insub = Insub(**opts.__dict__)
-    print insub.process().encode(opts.output_encoding, 'replace')
-
+    output = Insub(filters=filters, data=data, **opts.__dict__).rendered
+    if output:
+        print output.encode(opts.output_encoding, 'replace')
+    else:
+        parser.print_help()
     return 0
 
 
