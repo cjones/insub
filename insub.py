@@ -514,15 +514,8 @@ class Insub(object):
         for i, line in sorted(out.iteritems()):
             yield line
 
-    @filter()
-    def figlet(self, lines):
-        # XXX complicated
-        return lines
-
-    @filter()
-    def banner(self, lines):
-        # XXX complicated
-        return lines
+    #@filter() def figlet(self, lines): raise NotImplemented
+    #@filter() def banner(self, lines): raise NotImplemented
 
     @filter(hug_size=dict(metavar='<int>', default=HUG_SIZE, type='int',
                           help='How many hugs (default: %default)'),
@@ -537,9 +530,7 @@ class Insub(object):
         for line in lines:
             yield '%s %s %s' % (left, line.center(size), right)
 
-    @filter()
-    def rotate(self, lines):
-        return lines
+    #@filter() def rotate(self, lines): raise NotImplemented
 
     @filter(metavar='<width>', type='int')
     def wrap(self, lines):
@@ -547,20 +538,12 @@ class Insub(object):
         for line in textwrap.wrap(' '.join(lines), width=self.wrap):
             yield line
 
-    @filter()
-    def chalkboard(self, lines):
-        return lines
+    #@filter() def chalkboard(self, lines): raise NotImplemented
 
     # change the text presentation
 
-    @filter()
-    def checker(self, lines):
-        return lines
-
-    @filter()
-    def cow(self, lines):
-        # XXX complicated
-        return lines
+    #@filter() def checker(self, lines): raise NotImplemented
+    #@filter() def cow(self, lines): raise NotImplemented
 
     @filter()
     def flip(self, lines):
@@ -569,34 +552,18 @@ class Insub(object):
         for line in reversed(lines):
             yield line
 
-    @filter()
-    def outline(self, lines):
-        return lines
+    #@filter() def outline(self, lines): raise NotImplemented
 
     # change the final visual appearance
 
-    @filter()
-    def rainbow(self, lines):
-        # XXX complicated
-        return lines
-
-    @filter()
-    def tree(self, lines):
-        return lines
-
-    @filter()
-    def blink(self, lines):
-        return lines
+    #@filter() def rainbow(self, lines): raise NotImplemented
+    #@filter() def tree(self, lines): raise NotImplemented
+    #@filter() def blink(self, lines): raise NotImplemented
 
     # ircii jukes
 
-    @filter()
-    def ircii_fake(self, lines):
-        return lines
-
-    @filter()
-    def ircii_drop(self, lines):
-        return lines
+    #@filter() def ircii_fake(self, lines): raise NotImplemented
+    #@filter() def ircii_drop(self, lines): raise NotImplemented
 
     # post-processing filters
 
@@ -606,9 +573,7 @@ class Insub(object):
         for line in lines:
             yield self.prefix + line
 
-    @filter()
-    def strip(self, lines):
-        return lines
+    #@filter() def strip(self, lines): raise NotImplemented
 
     # misc utility functions/properties
 
