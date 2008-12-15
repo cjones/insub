@@ -260,6 +260,20 @@ JIGS_MAP = {34: 104, 44: 46, 45: 61, 46: 47, 47: 110, 48: 45, 55: 56, 56: 57,
             105: 111, 106: 107, 107: 108, 108: 59, 109: 46, 110: 109,
             111: 112, 112: 91, 117: 105, 121: 117}
 
+# chalkboard template
+CHALKBOARD = '\n'.join([
+        ' _____________________________________________________________ ',
+        '| **********************************************    ^^^^^^^^\ |',
+        '| **********************************************    |       | |',
+        '| **********************************************    |_ __   | |',
+        '| **********************************************    (.(. )  | |',
+        '| ***************************************** _       (_      ) |',
+        '|                                           \\\\      /___/\' /  |',
+        '|                                           _\\\\_      \    |  |',
+        '|                                          ((   )     /====|  |',
+        '|                                           \  <.__._-      \ |',
+        '|___________________________________________ <//___.         ||'])
+
 
 class Insub(object):
 
@@ -538,7 +552,19 @@ class Insub(object):
         for line in textwrap.wrap(' '.join(lines), width=self.wrap):
             yield line
 
-    #@filter() def chalkboard(self, lines): raise NotImplemented
+    @filter()
+    def chalkboard(self, lines):
+        """Put text onto bart's chalkboard"""
+        data = (' '.join(lines) + ' ').upper().replace('*', '')
+        i = 0
+        output = CHALKBOARD
+        while output.count('*'):
+            output = output.replace('*', data[i], 1)
+            i += 1
+            if i == len(data):
+                i = 0
+        for line in output.splitlines():
+            yield line
 
     # change the text presentation
 
