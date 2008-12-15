@@ -512,10 +512,6 @@ class Insub(object):
         # XXX this is complicated
         return lines
 
-    # dest metavar default action type nargs const choices callback help
-    # store[_(const|true|false)] append[_const] count callback
-    # string int long float complex choice
-
     @filter()
     def flip(self, lines):
         """Flip over lines"""
@@ -554,10 +550,11 @@ class Insub(object):
 
     # post-processing filters
 
-    @filter()
+    @filter(metavar='<text>', type='string')
     def prefix(self, lines):
         """Append text to each line"""
-        return lines
+        for line in lines:
+            yield self.prefix + line
 
     @filter()
     def strip(self, lines):
@@ -589,14 +586,29 @@ def main():
                       help="use order of filters supplied on commandline")
 
     # add filter options to arg parser
+    # XXX this is overly complex and not quite flexible enough..
+    # i'd like to abstract this to the decorator class and just have it
+    # spit out Option objects
     filters = []
-    add_filter = lambda option, key, val, parser, func: filters.append(func)
+
+    def add_filter(option, key, val, parser, func):
+        if val is not None:
+            setattr(parser.values, option.dest, val)
+        filters.append(func)
+
     for func, options in Insub.filter.filters:
-        parser.add_option('--' + func.__name__, action='callback',
-                          callback=add_filter, callback_args=(func,),
-                          help=func.__doc__)
+        filter_kwargs = dict(action='callback', callback=add_filter,
+                             callback_args=(func,), help=func.__doc__)
+        extra_options = []
         for option, kwargs in options.iteritems():
-            parser.add_option('--' + option, **kwargs)
+            if isinstance(kwargs, dict):
+                extra_options.append(('--' + option, kwargs))
+            else:
+                filter_kwargs[option] = kwargs
+        parser.add_option('--' + func.__name__, **filter_kwargs)
+        for opt, kwargs in extra_options:
+            parser.add_option(opt, **kwargs)
+
     opts, args = parser.parse_args()
 
     if opts.non_ordered:
