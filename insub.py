@@ -59,6 +59,22 @@ OUTLINE_STYLE = 'box'
 BANNER_WIDTH = 50
 BANNER_FG = '#'
 BANNER_BG = ' '
+COW_FILE = 'default'
+COW_TONGUE = '  '
+COW_EYES = 'oo'
+COW_STYLE = 'say'
+
+# try to find location of support files
+COW_PATH = None
+FIGLET_PATH = None
+COW_STYLES = ('say', 'think')
+for base in '/', '/usr', '/usr/local', '/opt/local':
+    path = os.path.join(base, 'share/figlet')
+    if not FIGLET_PATH and os.path.exists(path):
+        FIGLET_PATH = path
+    path = os.path.join(base, 'share/cows')
+    if not COW_PATH and os.path.exists(path):
+        COW_PATH = path
 
 # default encodings to use
 try:
@@ -263,6 +279,10 @@ JIGS_MAP = {34: 104, 44: 46, 45: 61, 46: 47, 47: 110, 48: 45, 55: 56, 56: 57,
             57: 48, 59: 39, 61: 55, 91: 93, 92: 117, 93: 92, 104: 106,
             105: 111, 106: 107, 107: 108, 108: 59, 109: 46, 110: 109,
             111: 112, 112: 91, 117: 105, 121: 117}
+
+# translation map for mirroring text
+MIRROR_MAP = {47: 92, 92: 47, 60: 62, 62: 60, 40: 41, 41: 40, 123: 125,
+              125: 123}
 
 # chalkboard template
 CHALKBOARD = """ _____________________________________________________________
@@ -1003,6 +1023,15 @@ BANNER_RULES = {' ': [227],
                       129, 30, 9, 76, 8, 129, 30, 13, 78, 6, 129, 30, 13, 81,
                       3, 129, 30, 13, 129, 193]}
 
+# backup cow for when cowsay isn't set
+DEFAULT_COW = """$the_cow = <<"EOC";
+        $thoughts   ^__^
+         $thoughts  ($eyes)\\_______
+            (__)\\       )\\/\\
+             $tongue ||----w |
+                ||     ||
+EOC"""
+
 
 class Insub(object):
 
@@ -1183,6 +1212,7 @@ class Insub(object):
         lines = list(lines)
         size = len(max(lines, key=len))
         for line in lines:
+            line = line.translate(MIRROR_MAP)
             yield u' ' * (size - len(line)) + u''.join(reversed(line))
 
     @filter()
@@ -1347,7 +1377,77 @@ class Insub(object):
     # change the text presentation
 
     #@filter() def checker(self, lines): raise NotImplemented
-    #@filter() def cow(self, lines): raise NotImplemented
+
+    @filter(cow_path=dict(metavar='<dir>', default=COW_PATH,
+                          help='Location of cow files (default: %default)'),
+            cow_file=dict(metavar='<cow>', default=COW_FILE,
+                          help='Default cow to use (%default)'),
+            cow_tongue=dict(metavar='<chars>', default=COW_TONGUE,
+                            help='Cow tongue (default: %s)' %
+                            repr(COW_TONGUE)),
+            cow_eyes = dict(metavar='<eyes>', default=COW_EYES,
+                            help='Cow eyees (default: %s)' %
+                            repr(COW_EYES)),
+            cow_style = dict(metavar='<%s>' % '|'.join(COW_STYLES),
+                             default=COW_STYLE, type='choice',
+                             choices=COW_STYLES,
+                             help='Cow thought bubble (default: %default)'))
+    def cow(self, lines):
+        """Make a cow say it"""
+
+        # look for the cow to use
+        template = DEFAULT_COW
+        if self.cow_path:
+            cowfile = self.cow_file
+            if not cowfile.endswith('.cow'):
+                cowfile += '.cow'
+            path = os.path.join(self.cow_path, cowfile)
+            if os.path.basename(path) != 'default.cow' and os.path.exists(path):
+                with open(path, 'r') as fp:
+                    template = fp.read()
+
+        # extract the actual cow from perl crap
+        cow = []
+        in_cow = False
+        for line in template.splitlines():
+            if 'EOC' in line:
+                in_cow = not in_cow
+            elif in_cow:
+                cow.append(line)
+        cow = u'\n'.join(cow)
+
+        # perform substitions on cow
+        if self.cow_style == 'say':
+            thoughts = '\\'
+        elif self.cow_style == 'think':
+            thoughts = 'o'
+        cow = re.sub(r'\\(.)', r'\1', cow)
+        cow = cow.replace('$thoughts', thoughts)
+        cow = cow.replace('$eyes', self.cow_eyes)
+        cow = cow.replace('$tongue', self.cow_tongue)
+
+        # construct the thought bubble
+        lines = list(lines)
+        size = len(max(lines, key=len))
+        yield u' ' + '_' * (size + 2) + ' '
+        for i, line in enumerate(lines):
+            if self.cow_style == 'think':
+                left, right = '(', ')'
+            elif len(lines) == 1:
+                left, right = '<', '>'
+            else:
+                if i == 0:
+                    left, right = '/', '\\'
+                elif i == len(lines) - 1:
+                    left, right = '\\', '/'
+                else:
+                    left = right = '|'
+            yield u'%s %s %s' % (left, line.ljust(size), right)
+        yield u' ' + '-' * (size + 2) + ' '
+
+        # yield the cow
+        for line in cow.splitlines():
+            yield line
 
     @filter()
     def flip(self, lines):
