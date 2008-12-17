@@ -1046,6 +1046,21 @@ DEFAULT_COW = """$the_cow = <<"EOC";
                 ||     ||
 EOC"""
 
+# translation rules for the swedish chef. bork bork bork!
+BORK_RULES = [['an', 'un'], ['An', 'Un'], ['au', 'oo'], ['Au', 'Oo'],
+              ["a([A-Za-z'])", r'e\1'], ["A([A-Za-z'])", r'E\1'],
+              ["en([^A-Za-z'])", r'ee\1'], ['ew', 'oo'],
+              ["e([^A-Za-z'])", r'e-a\1'], ['^e', 'i'], ['^E', 'I'],
+              ['f', 'ff'], ['ir', 'ur'], ['i', 'ee'], ['ow', 'oo'],
+              ['^o', 'oo'], ['^O', 'Oo'], ['o', 'u'], ['the', 'zee'],
+              ['The', 'Zee'], ["th([^A-Za-z'])", r't\1'], ['tion', 'shun'],
+              ['u', 'oo'], ['U', 'Oo'], ['v', 'f'], ['V', 'F'], ['w', 'v'],
+              ['W', 'V']]
+
+for i, rule in enumerate(BORK_RULES):
+    BORK_RULES[i] = re.compile(rule[0]), rule[1]
+
+
 class FigletFont(object):
 
     """
@@ -1552,6 +1567,19 @@ class Insub(object):
             for search, replace in JIVE_RULES:
                 line = search.sub(replace, line)
             yield line
+
+    @filter()
+    def bork(self, lines):
+        """Make speech more swedish"""
+        for line in lines:
+            new = []
+            for word in line.split():
+                for pat, repl in BORK_RULES:
+                    if pat.search(word):
+                        word = pat.sub(repl, word)
+                        break
+                new.append(word)
+            yield ' '.join(new)
 
     @filter()
     def scramble(self, lines):
