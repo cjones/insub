@@ -69,6 +69,7 @@ FIGLET_JUSTIFY = 'auto'
 FIGLET_FLIP = False
 FIGLET_REV = False
 
+# option choices
 FIGLET_DIRS = ('auto', 'left-to-right', 'right-to-left')
 COW_STYLES = ('say', 'think')
 JUSTIFY_OPTS = ('auto', 'left', 'right')
@@ -77,7 +78,6 @@ JUSTIFY_OPTS = ('auto', 'left', 'right')
 toggle = lambda x: ('store_%s' % (not x)).lower()
 
 # try to find location of figlet and cowsay files
-
 def find_share(name):
     """Find share directories of the provided name"""
     for prefix in ('/opt/local', '/usr/local', '/usr', '/'):
