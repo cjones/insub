@@ -89,7 +89,6 @@ def find_share(name):
 FIGLET_PATH = find_share('figlet')
 COW_PATH = find_share('cows')
 
-
 # default encodings to use
 try:
     INPUT_ENCODING = codecs.lookup(sys.stdin.encoding).name
@@ -1071,7 +1070,7 @@ class FigletFont(object):
     magic_number_re = re.compile(r'^flf2.')
     end_marker_re = re.compile(r'(.)\s*$')
 
-    def __init__(self, prefix=u'.', font=u'standard'):
+    def __init__(self, prefix='.', font='standard'):
         self.prefix = prefix
         self.font = font
         self.chars = {}
@@ -1138,7 +1137,7 @@ class FigletFont(object):
                     if not end:
                         end = self.end_marker_re.search(line).group(1)
                         end = re.compile(re.escape(end) + r'{1,2}$')
-                    line = end.sub(u'', line)
+                    line = end.sub('', line)
                     if len(line) > width:
                         width = len(line)
                     chars.append(line)
@@ -1243,7 +1242,7 @@ class FigletRenderingEngine(object):
             # ensures that the dominant (foreground)
             # fig-character for overlapping is the latter in the
             # user's text, not necessarily the rightmost character.
-            return left if self.base.direction == u'right-to-left' else right
+            return left if self.base.direction == 'right-to-left' else right
 
         if self.base.Font.smush_mode & self.SM_HARDBLANK:
             if (left == self.base.Font.hard_blank and
@@ -1359,7 +1358,7 @@ class FigletRenderingEngine(object):
             for row in xrange(self.base.Font.height):
                 add_left = buf[row]
                 add_right = cur_char[row]
-                if self.base.direction == u'right-to-left':
+                if self.base.direction == 'right-to-left':
                     add_left, add_right = add_right, add_left
                 for i in xrange(max_smush):
                     try:
