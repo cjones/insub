@@ -10,14 +10,31 @@ class ColorError(Exception):
 
 class Color(object):
 
-    colors = ['black',    # 0
-              'white',    # 1
-              'red',      # 2
-              'yellow',   # 3
-              'green',    # 4
-              'cyan',     # 5
-              'blue',     # 6
-              'magenta']  # 7
+    """Library for managing text with ANSI/mIRC color codes"""
+
+    # how to encode this data bitwisey... might require a rewrite at this
+    # point to do this shit.. BLARGH.
+    #
+    # at least i've made progress in understanding the problem at this level
+    # major argh-face.
+    #
+    # default, bg, fg = col >> 7, (col & 112) >> 4, col & 15
+    # col = (default << 7) + (bg << 4) + fg
+
+    # colors = ['black',    # 0
+    #           'white',    # 1
+    #           'red',      # 2
+    #           'yellow',   # 3
+    #           'green',    # 4
+    #           'cyan',     # 5
+    #           'blue',     # 6
+    #           'magenta']  # 7
+
+    # these contain the rules for parsing out ansi/mirc codes.  a mapping
+    # is created to an intensity/0-7 code that both mirc and ansi can share
+    # ansi's index is created by using code-30 (+8 if intensity on) while
+    # mirc uses its actual 0-15 number code.  note that for background colors,
+    # using ones which mean "intensity on" for foreground colors is invalid
 
     styles = {'mirc': {'color': re.compile('(\x03[0-9,]+\x16*|\x0f)'),
                        'parse': re.compile('\x03([0-9]+)(?:,([0-9]+))?'),
@@ -36,6 +53,7 @@ class Color(object):
         self.style = style
 
     def decode(self, data):
+        """Decodes text into a stripped version and a normalized colormap"""
         if isinstance(data, basestring):
             data = data.splitlines()
         clean = []
@@ -99,6 +117,31 @@ class Color(object):
             colmap.append(colmap_line)
         return clean, colmap
 
+    def encode(self, data, colmap=None):
+        """Encode data using the supplied codemap to produce color output"""
+        if colmap is None:
+            colmap = []
+        if isinstance(data, basestring):
+            data = data.splitlines()
+        output = []
+        for i, line in enumerate(data):
+            output_line = []
+            current_fg = current_bg = -1
+            for j, ch in enumerate(line):
+                fg, bg = colmap[i][j]
+                new_fg = new_bg = None
+                if fg != current_fg:
+                    new_fg = current_fg = fg
+                    current_fg = fg
+                if bg != current_bg:
+                    new_bg = current_bg = bg
+                    current_bg = bg
+                if new_fg or new_bg:
+                    pass
+                output_line.append(ch)
+            output.append(''.join(output_line))
+        return output
+
     @property
     def color_re(self):
         return self.styles[self.style]['color']
@@ -113,6 +156,15 @@ class Color(object):
 
 
 def main():
+    style = 'mirc'
+    color = Color(style)
+    with open(style + '.txt', 'rb') as file:
+        data = file.read()
+    lines, colmap = color.decode(data)
+    print '\n'.join(lines)
+    color.style = 'ansi'
+    lines = color.encode(lines, colmap)
+    print '\n'.join(lines)
     return 0
 
 if __name__ == '__main__':
