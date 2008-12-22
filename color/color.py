@@ -144,13 +144,14 @@ def main():
     # XXX html encoding? :P
     # XXX seems to be some intensity confusion between mirc and ansi?
     # XXX getting about time to see if this is going to work at all w/insub
-    style = 'ansi'
+    style = 'mirc'
     col = ColorMap(style)
     with open(style + '.txt', 'rb') as file:
         data = file.read()
     print data
     lines, colmap = col.decode(data)
-    col.style = 'mirc'
+    print '\n'.join(lines)
+    col.style = 'ansi'
     print '\n'.join(col.encode(lines, colmap))
     return 0
 
