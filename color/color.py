@@ -36,7 +36,7 @@ class ColorMap(object):
         except:
             encoding = sys.getdefaultencoding()
 
-        # file-like objects return lines with newlines in tact,
+        # file-like objects return lines with newlines intact,
         # other iterables return stripped lines
         if hasattr(data, 'read'):
             data = ''.join(data)
@@ -58,7 +58,7 @@ class ColorMap(object):
             raise ColorMapError('unknown scheme: %s' % scheme)
 
         # store decoded version
-        self.plain, self.colormap = self.decode(data.splitlines(), scheme)
+        self.plain, self.colormap = self.decode(data, scheme)
         self.scheme = scheme
         self.encoding = encoding
 
@@ -79,12 +79,20 @@ class ColorMap(object):
         return 'plain'
 
     @classmethod
-    def decode(cls, lines, scheme):
-        """Returns decoded plain text and its colormap from lines"""
+    def decode(cls, data, scheme):
+        """Returns decoded plain text and its colormap from text"""
+
+        # sanity check inputs
+        if not isinstance(data, unicode):
+            raise ColorMapError('decode requires unicode data')
+        if scheme not in cls.schemes:
+            raise ColorMapError('unknown scheme: %s' % scheme)
+
+        # decode
         plain = []
         colmap = []
         color_re = cls.schemes[scheme]['color_re']
-        for line in lines:
+        for line in data.splitlines():
             plain_line = []
             colmap_line = []
             current_color = None
@@ -107,14 +115,16 @@ class ColorMap(object):
 
     def __repr__(self):
         return '<%s object at 0x%x: lines=%d, scheme=%s, encoding=%s>' % (
-                self.__class__.__name__, id(self), len(self.lines),
+                self.__class__.__name__, id(self), len(self.plain),
                 self.scheme, self.encoding)
 
 
 def main():
     for path in sys.argv[1:]:
         with open(path, 'r') as file:
-            col = ColorMap(file)
+            col = ColorMap(file, encoding='utf8')
+        print repr(col)
+        print col
     return 0
 
 if __name__ == '__main__':
