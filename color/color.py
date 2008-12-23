@@ -35,13 +35,15 @@ class ColorMap(object):
                                 (0, 7)]},  # 15
                'ansi': {'color_re': re.compile('(\x1b\[[0-9;]+m)'),
                         'parse_re': re.compile('\x1b\[([0-9;]+)')},
+               # dummy entry to handle uncolored text
                'plain': {'color_re': re.compile('(\xff)'),
                          'parse_re': re.compile('(\xff)')}}
 
-    reset = (7,      # fg
-             False,  # intense
-             0,      # bg
-             True)   # default
+    # the default color scheme (white on black)
+    reset = (7,  # foreground color
+             0,  # intensity on
+             0,  # background color
+             1)  # default flag indicates color has not changed
 
     def __init__(self, data=None, scheme=None, encoding=None):
         """Instantiate a color-mapped text string"""
@@ -80,13 +82,12 @@ class ColorMap(object):
         self.scheme = scheme
         self.encoding = encoding
 
-    @property
-    def color_re(self):
-        return self.schemes[self.scheme]['color_re']
-
-    @property
-    def parse_re(self):
-        return self.schemes[self.scheme]['parse_re']
+    def render(self, scheme=None):
+        if scheme is None:
+            scheme = self.scheme
+        data = self.encode(self.plain, self.colmap, scheme)
+        data = '\n'.join(data).encode(self.encoding, 'replace')
+        return data
 
     @classmethod
     def detect(cls, data):
@@ -126,7 +127,7 @@ class ColorMap(object):
                         fg, intense, bg, default = cls.reset
                     else:
                         part = attrs['parse_re'].search(part).groups()
-                        default = False
+                        default = 0
                         if scheme == 'mirc':
                             new_fg, new_bg = part
                             if new_fg is not None:
@@ -138,9 +139,9 @@ class ColorMap(object):
                                 if part == 0:
                                     fg, intense, bg, default = cls.reset
                                 elif part == 1:
-                                    intense = True
+                                    intense = 1
                                 elif part in (2, 22):
-                                    intense = False
+                                    intense = 0
                                 elif part == 39:
                                     fg = cls.reset[0]
                                 elif part == 49:
@@ -163,20 +164,80 @@ class ColorMap(object):
     def encode(cls, lines, colmap, scheme):
         """Encode in color"""
 
+        # sanity check inputs
+        if scheme not in cls.schemes:
+            raise ColorMapError('unknown scheme: %s' % scheme)
+
+        # encode
+        attrs = cls.schemes[scheme]
+        output = []
+        for i, line in enumerate(lines):
+            last = list(cls.reset)  # the last color we painted
+            output_line = []        # one fully rendered line
+            for j, ch in enumerate(line):
+
+                # first get the color mapped to this character
+                col = list(cls.unpack(colmap[i][j]))
+
+                # what's changed?
+                fg_changed = col[0] != last[0]
+                intense_changed = col[1] != last[1]
+                bg_changed = col[2] != last[2]
+
+                # the conditions under which we will need to repaint
+                if (bg_changed or
+                    (ch != ' ' and (fg_changed or intense_changed))):
+
+                    outcol = None
+                    if scheme == 'mirc':
+                        if col[3]:
+                            outcol = '\x0f'
+                        else:
+                            codes = []
+                            if fg_changed or intense_changed:
+                                newcol = attrs['map'].index((col[1], col[0]))
+                                codes.append(str(newcol))
+                            if bg_changed:
+                                if not codes:
+                                    codes.append('')
+                                newcol = attrs['map'].index((0, col[2]))
+                                codes[1] = str(newcol)
+                            outcol = '\x03%s' % ','.join(codes)
+                            if (j + 1) < len(line) and line[j + 1].isdigit():
+                                outcol += '\x16\x16'
+                    elif scheme == 'ansi':
+                        codes = []
+                        if col[3]:
+                            codes.append(0)
+                        else:
+                            if fg_changed:
+                                codes.append(col[0] + 30)
+                            if bg_changed:
+                                codes.append(col[2] + 40)
+                            if intense_changed:
+                                if col[1]:
+                                    codes.append(1)
+                                else:
+                                    codes.append(22)
+                        outcol = '\x1b[%sm' % ';'.join(map(str, codes))
+                    if outcol:
+                        last = col
+                        output_line.append(outcol)
+
+                output_line.append(ch)
+            output.append(''.join(output_line))
+        return output
+
     @staticmethod
-    def pack(fg, intense=False, bg=0, default=False):
+    def pack(fg, intense=0, bg=0, default=1):
         """Pack color -> char"""
-        return chr((fg & 7) +
-                   ((1 if intense else 0) << 3) +
-                   ((bg & 7) << 4) +
-                   ((1 if default else 0) << 7))
+        return chr(fg + (intense << 3) + (bg << 4) + (default << 7))
 
     @staticmethod
     def unpack(char):
         """Unpack color -> (fg, intense, bg, default)"""
         char = ord(char)
-        return ((char & 7), bool((char & 8) >> 3),
-                (char & 112) >> 4, bool((char & 128) >> 7))
+        return (char & 7), (char & 8) >> 3, (char & 112) >> 4, (char & 128) >> 7
 
     def __iter__(self):
         for line in self.plain:
@@ -195,8 +256,7 @@ def main():
     for path in sys.argv[1:]:
         with open(path, 'r') as file:
             col = ColorMap(file, encoding='utf8')
-        print repr(col)
-        print col
+        print col.render('mirc')
     return 0
 
 
