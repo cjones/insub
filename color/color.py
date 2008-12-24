@@ -314,8 +314,12 @@ class ColorMap(object):
                 self.__class__.__name__, id(self), len(self.plain),
                 self.scheme, self.encoding)
 
+
+##########################################################################
+### The following functions are just some hacks to mess around w/ maps ###
+##########################################################################
+
 """
-my $rainbowMap = {
 	rainbow	=> 'rrooyyYYGGggccCCBBbbmmMM',	# -1
 	usa	=> 'oowwBB',			# -2
 	blue	=> 'bB',			# -4blue
@@ -327,16 +331,12 @@ my $rainbowMap = {
 	scale	=> 'ww22CC11CC22',		# -6
 	xmas	=> 'og',			# -7
 	canada	=> 'ooww',			# -8
-};
-
-xyz
-yzx
-
-xxyyzz
-xxyyzz
-yyzzxx
-yyzzxx
 """
+
+# this brutally expands a map by some factor. with no anti-aliasing,
+# or sub-pixel hinting (loolol), you probably want to avoid this ever being
+# called. in practice this means having source maps that are larger than
+# the ascii text they are painting.
 
 def expand(lines, factor):
     new = []
@@ -344,7 +344,13 @@ def expand(lines, factor):
         new += [''.join(ch * factor for ch in line)] * factor
     return new
 
-
+# this shrinks a map to a specific size by dropping some factor of pixels
+# along a line, and skipping some lines.  this has a few problems.  namely,
+# removing a whole line from a smaller bitmap can completely change what
+# it's supposed to be.  second, image maps created from an image with 1:1
+# pixel aspect ratio become all stretchy.  this function should be able to
+# remove lines at a higher frequency so as to stretch the image back into
+# shape..
 def shrink(lines, width):
     longest = len(max(lines, key=len))
     if isinstance(width, float) and width < 1:
@@ -364,6 +370,9 @@ def shrink(lines, width):
     return scaled
 
 
+# this function takes two bitmaps, refits the latter to fit the former
+# by any means necessary (shrinking/expanding), and returns it.  it can
+# be pretty damn slow, so we might need to rethink this.
 def fit(orig, map):
     orig_width = len(max(orig, key=len))
     orig_height = len(orig)
@@ -380,6 +389,9 @@ def fit(orig, map):
     return map
 
 
+# this takes a bitmap in the external format (using one-letter codes)
+# and puts it into a format that ColorMap can understand.  This could
+# probably be integrated into colormap
 def repack(map):
     new = []
     for line in map:
@@ -398,29 +410,14 @@ def repack(map):
 
 
 def main():
-
-
-    with open('tubgirl.map', 'rb') as file:
-        map = file.read()
-    map = map.splitlines()
-    print len(map[0])
-
-    orig = ['*' * 70] * 60
-    map = fit(orig, map)
-    print len(map[0])
-    map = repack(map)
-    col = ColorMap(orig)
-    col.colmap = map
-    foo = col.render('ansi')
-    print foo
-
-
-
-
-
+    return 0
 
 
 if __name__ == '__main__':
-    import psyco
-    psyco.full()
+    try:
+        import psyco
+        psyco.cannotcompile(re.compile)
+        psyco.full()
+    except ImportError:
+        pass
     sys.exit(main())
