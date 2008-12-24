@@ -13,6 +13,19 @@ class ColorMap(object):
 
     """Class to manage an ANSI/mIRC color-mapped text string"""
 
+    # mapping by color name
+    colnames = ['black',    # 0
+                'red',      # 1
+                'green',    # 2
+                'yellow',   # 3
+                'blue',     # 4
+                'magenta',  # 5
+                'cyan',     # 6
+                'white']    # 7
+
+    # mapping by color code
+    codes = ['d', 'r', 'g', 'y', 'b', 'm', 'c', 'w']
+
     # structural data for various color schemes
     schemes = {'mirc': {'color_re': re.compile('(\x03[0-9,]+\x16*|\x0f)'),
                         'parse_re': re.compile('\x03([0-9]+)?(?:,([0-9]+))?'),
@@ -177,7 +190,10 @@ class ColorMap(object):
             for j, ch in enumerate(line):
 
                 # first get the color mapped to this character
-                col = list(cls.unpack(colmap[i][j]))
+                try:
+                    col = list(cls.unpack(colmap[i][j]))
+                except IndexError:
+                    col = last
 
                 # what's changed?
                 fg_changed = col[0] != last[0]
@@ -201,7 +217,7 @@ class ColorMap(object):
                                 if not codes:
                                     codes.append('')
                                 newcol = attrs['map'].index((0, col[2]))
-                                codes[1] = str(newcol)
+                                codes.append(str(newcol))
                             outcol = '\x03%s' % ','.join(codes)
                             if (j + 1) < len(line) and line[j + 1].isdigit():
                                 outcol += '\x16\x16'
@@ -239,6 +255,53 @@ class ColorMap(object):
         char = ord(char)
         return (char & 7), (char & 8) >> 3, (char & 112) >> 4, (char & 128) >> 7
 
+    @classmethod
+    def pack_by_name(cls, name):
+        """Return the packed color value by name"""
+
+        # XXX this whole function should be greatly simplified..
+        # but at least it works, will be useful somewhere i think.
+        name = name.lower()
+        name = name.replace('dark', '')
+        name = name.replace('light', 'bright')
+        name = name.replace('gray', 'grey')
+        name = name.replace('orange', 'bright red')
+        name = name.replace('purple', 'magenta')
+        name = name.split()
+        if 'on' not in name:
+            name += ['on', 'black']
+        on = name.index('on')
+
+        # grey -> bright black
+        # bright grey -> white
+        # white -> bright white
+        def fixgrey(words):
+            if 'grey' in words:
+                if 'bright' in words:
+                    return ['white']
+                else:
+                    return ['bright', 'black']
+            elif 'white' in words:
+                return ['bright', 'white']
+            else:
+                return words
+
+        fg, intense, bg, default = cls.reset
+        for word in fixgrey(name[:on]):
+            if word == 'bright':
+                intense = 1
+                default = 0
+            elif word in cls.colnames:
+                fg = cls.colnames.index(word)
+                default = 0
+        for word in fixgrey(name[on + 1:]):
+            if word in cls.colnames:
+                bg = cls.colnames.index(word)
+                default = 0
+
+        char = cls.pack(fg, intense, bg, default)
+        return char
+
     def __iter__(self):
         for line in self.plain:
             yield line
@@ -251,14 +314,113 @@ class ColorMap(object):
                 self.__class__.__name__, id(self), len(self.plain),
                 self.scheme, self.encoding)
 
+"""
+my $rainbowMap = {
+	rainbow	=> 'rrooyyYYGGggccCCBBbbmmMM',	# -1
+	usa	=> 'oowwBB',			# -2
+	blue	=> 'bB',			# -4blue
+	green	=> 'gG',			# -4green
+	purple	=> 'mM',			# -4purple
+	grey	=> '12',			# -4grey (-5)
+	yellow	=> 'yY',			# -4yellow
+	red	=> 'or',			# -4red
+	scale	=> 'ww22CC11CC22',		# -6
+	xmas	=> 'og',			# -7
+	canada	=> 'ooww',			# -8
+};
+
+xyz
+yzx
+
+xxyyzz
+xxyyzz
+yyzzxx
+yyzzxx
+"""
+
+def expand(lines, factor):
+    new = []
+    for line in lines:
+        new += [''.join(ch * factor for ch in line)] * factor
+    return new
+
+
+def shrink(lines, width):
+    longest = len(max(lines, key=len))
+    if isinstance(width, float) and width < 1:
+        width = int(longest * width)
+    scale = int(float(longest) / width * 100)
+    hscale = int((float(longest) * 1) / width * 100)
+    scaled = []
+    for i in xrange(len(lines) * 100):
+        line = lines[i / 100]
+        if not i % scale:
+            scaled_line = []
+            for j in xrange(len(line) * 100):
+                ch = line[j / 100]
+                if not j % hscale:
+                    scaled_line.append(ch)
+            scaled.append(''.join(scaled_line))
+    return scaled
+
+
+def fit(orig, map):
+    orig_width = len(max(orig, key=len))
+    orig_height = len(orig)
+    factor = 2
+    while True:
+        map_width = len(max(map, key=len))
+        map_height = len(map)
+        if map_width < orig_width or map_height < orig_height:
+            map = expand(map, factor)
+            factor += 1
+            continue
+        break
+    map = shrink(map, orig_width)
+    return map
+
+
+def repack(map):
+    new = []
+    for line in map:
+        new_line = []
+        for ch in line:
+            if ch.isupper():
+                intense = 1
+                ch = ch.lower()
+            else:
+                intense = 0
+            fg = ColorMap.codes.index(ch)
+            col = ColorMap.pack(fg, intense, default=0)
+            new_line.append(col)
+        new.append(''.join(new_line))
+    return new
+
 
 def main():
-    for path in sys.argv[1:]:
-        with open(path, 'r') as file:
-            col = ColorMap(file, encoding='utf8')
-        print col.render('mirc')
-    return 0
+
+
+    with open('tubgirl.map', 'rb') as file:
+        map = file.read()
+    map = map.splitlines()
+    print len(map[0])
+
+    orig = ['*' * 70] * 60
+    map = fit(orig, map)
+    print len(map[0])
+    map = repack(map)
+    col = ColorMap(orig)
+    col.colmap = map
+    foo = col.render('ansi')
+    print foo
+
+
+
+
+
 
 
 if __name__ == '__main__':
+    import psyco
+    psyco.full()
     sys.exit(main())
