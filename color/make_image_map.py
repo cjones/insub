@@ -54,7 +54,8 @@ def fix_flesh_tone(rgb):
     # it considers flesh and allow the user to specify a skew that relates
     # to the skin tone of the subject.  this might even be auto-detected by
     # a color count.  right now this is better than nothing though.  without
-    # this adjustment, most photographs of people turn into a slop of grey
+    # this adjustment, most photographs of people turn into a slop of grey.
+    #
     # another candidate for adjustment is the +37 to r/g.. the point of this
     # is to put the midpoint of flesh tones around the midpoint of ansi
     # dark yellow/bright yellow.  then lighting or tanlines will show up
@@ -85,13 +86,32 @@ def weighted_color_dist(x, y):
                      (((767 - rmean) * ((x[2] - y[2]) ** 2)) >> 8))
 
 
+def fill(data, node, color, new):
+    """Queue-based color fill"""
+    if data[node[0]][node[1]] != color:
+        return
+    queue = [node]
+    while queue:
+        x, y = queue.pop(0)
+        if data[x][y] == color:
+            data[x][y] = new
+        for i in [-1 if x > 0 else 0, 1 if x < len(data) - 1 else 0]:
+            for j in [-1 if y > 0 else 0, 1 if y < len(data[x]) - 1 else 0]:
+                x2, y2 = x + i, y + j
+                if data[x2][y2] == color:
+                    data[x2][y2] = new
+                    queue.append((x2, y2))
+
+
 def main():
-    parser = OptionParser(usage='%prog [-lci] [-o <map>] <image>')
+    parser = OptionParser(usage='%prog [-lci] [-b <char>] [-o <map>] <image>')
     parser.add_option('-o', dest='output', metavar='<file>', help='output map')
     parser.add_option('-c', dest='correct', default=False, action='store_true',
                       help='correct aspect ratio (prevent stretched map)')
     parser.add_option('-f', dest='flesh', default=False, action='store_true',
                       help='make flesh tones more yellow')
+    parser.add_option('-b', dest='bgfill', metavar='<char>',
+                      help='fill background with this color')
     parser.add_option('-i', dest='palette', default=pure,
                       action='store_const', const=iterm,
                       help='use iterm palette (darker)')
@@ -118,20 +138,48 @@ def main():
     if image.mode == 'P':
         palette = image.getpalette()
         palette = [palette[i:i + 3] for i in xrange(0, len(palette), 3)]
-    with open(opts.output, 'wb') as fp:
-        for y in xrange(height):
-            for x in xrange(width):
-                rgb = image.getpixel((x, y))
-                if image.mode == 'P':
-                    rgb = palette[rgb]
-                if opts.flesh:
-                    rgb = fix_flesh_tone(rgb)
-                fp.write(sorted(
-                    [(opts.distance(rgb, code_rgb), code)
-                     for code, code_rgb in opts.palette])[0][1])
-            fp.write('\n')
-    print 'elapsed: %.2f' % (time.time() - start)
 
+    # convert pixel data into a map
+    data = []
+    for y in xrange(height):
+        line = []
+        for x in xrange(width):
+            rgb = image.getpixel((x, y))
+            if image.mode == 'P':
+                rgb = palette[rgb]
+            if opts.flesh:
+                rgb = fix_flesh_tone(rgb)
+            line.append(sorted(
+                [(opts.distance(rgb, code_rgb), code)
+                 for code, code_rgb in opts.palette])[0][1])
+        data.append(line)
+
+    # figure out what the background color is if fill is requested
+    if opts.bgfill:
+        edges = {}
+        for x in xrange(len(data)):
+            if x == 0 or x == len(data) - 1:
+                i = xrange(len(data[x]))
+            else:
+                i = (0, len(data[x]) - 1)
+            for y in i:
+                edges.setdefault(data[x][y], []).append((x, y))
+
+        color, nodes = sorted(edges.iteritems(),
+                              key=lambda item: len(item[1]),
+                              reverse=True)[0]
+
+        # fill in background color with the new one
+        for node in nodes:
+            fill(data, node, color, opts.bgfill)
+
+    # save final map
+    with open(opts.output, 'wb') as fp:
+        for line in data:
+            fp.write(''.join(line))
+            fp.write('\n')
+
+    print 'finished in %.2f seconds' % (time.time() - start)
     return 0
 
 
