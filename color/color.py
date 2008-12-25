@@ -3,6 +3,7 @@
 import sys
 import re
 import codecs
+import optparse
 
 class ColorMapError(Exception):
 
@@ -315,6 +316,11 @@ class ColorMap(object):
                 self.scheme, self.encoding)
 
 
+#
+# so.. how to continue this project?  it might be in my best interest
+# to try and wedge what i have so far onto insub.py to see if this
+# will even work, before i refine it much futher..
+
 ##########################################################################
 ### The following functions are just some hacks to mess around w/ maps ###
 ##########################################################################
@@ -373,19 +379,19 @@ def shrink(lines, width):
 # this function takes two bitmaps, refits the latter to fit the former
 # by any means necessary (shrinking/expanding), and returns it.  it can
 # be pretty damn slow, so we might need to rethink this.
-def fit(orig, map):
-    orig_width = len(max(orig, key=len))
-    orig_height = len(orig)
-    factor = 2
+def fit(map, width):
+    factor = 1
     while True:
-        map_width = len(max(map, key=len))
-        map_height = len(map)
-        if map_width < orig_width or map_height < orig_height:
-            map = expand(map, factor)
-            factor += 1
-            continue
-        break
-    map = shrink(map, orig_width)
+        if factor > 1:
+            new = expand(map, factor)
+        else:
+            new = map
+        if len(new[0]) >= width:
+            map = new
+            break
+        factor += 1
+    if len(map[0]) > width:
+        map = shrink(map, width)
     return map
 
 
@@ -410,6 +416,20 @@ def repack(map):
 
 
 def main():
+    parser = optparse.OptionParser()
+    parser.add_option('-m', '--mirc', dest='scheme', default='ansi',
+                      action='store_const', const='mirc')
+    parser.add_option('-w', '--width', default=67, type='int')
+    opts, args = parser.parse_args()
+
+    for path in args:
+        with open(path, 'rb') as fp:
+            colmap = fp.read()
+        colmap = fit(colmap.splitlines(), opts.width)
+        plain = ['*' * opts.width] * len(colmap)
+        map = ColorMap(plain, opts.scheme)
+        map.colmap = repack(colmap)
+        print map.render()
     return 0
 
 
