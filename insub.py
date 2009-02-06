@@ -531,6 +531,7 @@ BANNER_RULES = {' ': [227],
                       47, 16, 87, 16, 129, 46, 16, 88, 16, 129, 45, 16, 89, 16,
                       129, 46, 14, 90, 14, 129, 193],
                 '=': [53, 4, 63, 4, 152, 193],
+                #'=': [53, 4, 88, 6, 152, 193],  # shaft!
                 '>': [129, 46, 14, 90, 14, 129, 45, 16, 89, 16, 129, 46, 16,
                       88, 16, 129, 47, 16, 87, 16, 129, 48, 16, 86, 16, 129,
                       49, 16, 85, 16, 129, 50, 16, 84, 16, 129, 51, 16, 83, 16,
@@ -1705,6 +1706,18 @@ class Insub(object):
         """Reverse text using unicode flippage"""
         for line in lines:
             yield line.translate(UNIFLIP)
+
+    @filter()
+    def unibig(self, lines):
+        """Change ASCII chars to REALLY BIG unichars"""
+        for line in lines:
+            newline = []
+            for ch in line:
+                o = ord(ch)
+                if o >= 33 and o <= 126:
+                    o += 65248
+                newline.append(unichr(o))
+            yield u''.join(newline)
 
     @filter()
     def asciiflip(self, lines):
