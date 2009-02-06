@@ -1556,7 +1556,12 @@ class Insub(object):
         """Return rendered data"""
         lines = self.data.splitlines()
         for filter in self.filters:
+            lines = list(lines)
+            #print 'we have %d lines' % len(lines)
+            #print 'running %s' % filter
             lines = filter(self, lines)
+            lines = list(lines)
+            #print 'we NOW have %d lines' % len(lines)
         return u'\n'.join(lines)
 
     class filter(object):
@@ -1717,6 +1722,8 @@ class Insub(object):
                 if o >= 33 and o <= 126:
                     o += 65248
                 newline.append(unichr(o))
+                if ch == ' ':
+                    newline.append(' ')
             yield u''.join(newline)
 
     @filter()
@@ -2101,7 +2108,7 @@ def main():
     if output:
         print output.encode(opts.output_encoding, 'replace')
     else:
-        parser.print_help()
+        pass
     return 0
 
 
