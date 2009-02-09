@@ -41,6 +41,14 @@ import sys
 import os
 import re
 
+# possibly POSIX-only stuff
+try:
+    import pty
+    from select import select
+    import errno
+except ImportError:
+    pass
+
 __version__ = '0.1'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
@@ -68,6 +76,9 @@ FIGLET_DIR = 'auto'
 FIGLET_JUSTIFY = 'auto'
 FIGLET_FLIP = False
 FIGLET_REV = False
+PTY_EXEC = False
+PTY_TIMEOUT = None
+LINE_RENDER = False
 
 # option choices
 FIGLET_DIRS = ('auto', 'left-to-right', 'right-to-left')
@@ -89,7 +100,7 @@ def find_share(name):
 FIGLET_PATH = find_share('figlet')
 COW_PATH = find_share('cows')
 
-# default encodings to use
+# default encodings to use XXX might just default to utf8
 try:
     INPUT_ENCODING = codecs.lookup(sys.stdin.encoding).name
 except:
@@ -99,6 +110,9 @@ try:
     OUTPUT_ENCODING = codecs.lookup(sys.stdout.encoding).name
 except:
     OUTPUT_ENCODING = sys.getdefaultencoding()
+
+# precompiled regex
+newline_re = re.compile(r'\r?\n')
 
 # list of spook words, stolen from emacs
 SPOOK_PHRASES = (
@@ -152,6 +166,9 @@ UNIFLIP = {8255: 8256, 8261: 8262, 33: 161, 34: 8222, 38: 8523, 39: 44, 40: 41,
            102: 607, 103: 387, 104: 613, 105: 305, 106: 638, 107: 670,
            108: 643, 109: 623, 110: 117, 114: 633, 116: 647, 118: 652,
            119: 653, 121: 654, 123: 125}
+
+# translation map for unibig
+UNIBIG = dict((i, i + 65248) for i in xrange(33, 127))
 
 # ascii flip map if unicode is too much awesome
 ASCIIFLIP = {47: 92, 92: 47,      # / <-> \
@@ -1553,16 +1570,22 @@ class Insub(object):
 
     @property
     def rendered(self):
-        """Return rendered data"""
+        """The rendered data"""
         lines = self.data.splitlines()
         for filter in self.filters:
             lines = list(lines)
-            #print 'we have %d lines' % len(lines)
-            #print 'running %s' % filter
             lines = filter(self, lines)
             lines = list(lines)
-            #print 'we NOW have %d lines' % len(lines)
         return u'\n'.join(lines)
+
+    def line_render(self):
+        """Try to render each line independently"""
+        for line in self.data.splitlines():
+            lines = [line]
+            for filter in self.filters:
+                lines = filter(self, lines)
+            for line in lines:
+                yield line
 
     class filter(object):
 
@@ -1625,15 +1648,51 @@ class Insub(object):
         for line in lines:
             yield line
 
-    @filter()
+    @filter(ptyexec=dict(default=PTY_EXEC, action='store_true',
+                         help='exec() runs in a pty'),
+            ptytimeout=dict(metavar='<secs>', default=PTY_TIMEOUT,
+                            type='float', help='timeout for pty exec()'))
     def execute(self, lines):
         """Execute args and add data to the output"""
         for line in lines:
             line = line.encode(self.output_encoding, 'replace')
             cmd = shlex.split(line)
-            process = Popen(cmd, stdout=PIPE, stderr=STDOUT)
-            for line in process.stdout:
-                yield line.rstrip().decode(self.input_encoding, 'replace')
+
+            # fake a pty for stuff that likes to buffer output.. this
+            # is not guaranteed to work cross-platform, so if it doesn't,
+            # don't use it..
+            if self.ptyexec:
+                pid, fd = pty.fork()
+                if pid == pty.CHILD:
+                    os.execvp(cmd[0], cmd)
+                    sys.exit(1)
+                rbuf = []
+                while True:
+                    data = None
+                    if fd in select([fd], [], [], self.ptytimeout)[0]:
+                        try:
+                            data = os.read(fd, 1024)
+                        except OSError, error:
+                            if error.errno != errno.EIO:
+                                raise
+                    if not data:
+                        data = ''.join(rbuf)
+                        yield data.decode(self.input_encoding, 'replace')
+                        break
+                    rbuf.append(data)
+                    if '\n' in data:
+                        data = ''.join(rbuf)
+                        lines = newline_re.split(data)
+                        rbuf = [lines.pop()]
+                        for line in lines:
+                            yield line.decode(self.input_encoding, 'replace')
+                os.close(fd)
+                os.waitpid(pid, 0)
+            else:
+                # the more cross-platform way of doing this
+                process = Popen(cmd, stdout=PIPE, stderr=STDOUT)
+                for line in process.stdout:
+                    yield line.rstrip().decode(self.input_encoding, 'replace')
 
     @filter()
     def slurp(self, lines):
@@ -1716,15 +1775,7 @@ class Insub(object):
     def unibig(self, lines):
         """Change ASCII chars to REALLY BIG unichars"""
         for line in lines:
-            newline = []
-            for ch in line:
-                o = ord(ch)
-                if o >= 33 and o <= 126:
-                    o += 65248
-                newline.append(unichr(o))
-                if ch == ' ':
-                    newline.append(' ')
-            yield u''.join(newline)
+            yield line.translate(UNIBIG).replace(' ', '  ')
 
     @filter()
     def asciiflip(self, lines):
@@ -2043,17 +2094,6 @@ class Insub(object):
         elif self.outline_style == '3d':
             yield u'+' + '-' * (size + 2) + '+/'
 
-    # change the final visual appearance
-
-    #@filter() def rainbow(self, lines): raise NotImplemented
-    #@filter() def tree(self, lines): raise NotImplemented
-    #@filter() def blink(self, lines): raise NotImplemented
-
-    # ircii jukes
-
-    #@filter() def ircii_fake(self, lines): raise NotImplemented
-    #@filter() def ircii_drop(self, lines): raise NotImplemented
-
     # post-processing filters
 
     @filter(dest='prefix_string', metavar='<text>', type='string')
@@ -2076,6 +2116,12 @@ class Insub(object):
             if line:
                 yield line
 
+    # change the final visual appearance
+
+    #@filter() def rainbow(self, lines): raise NotImplemented
+    #@filter() def tree(self, lines): raise NotImplemented
+    #@filter() def blink(self, lines): raise NotImplemented
+
     # misc utility functions/properties
 
     @property
@@ -2085,9 +2131,6 @@ class Insub(object):
 
 
 def main():
-    # dest metavar default action type nargs const choices callback help
-    # store[_(const|true|false)] append[_const] count callback
-    # string int long float complex choice
     parser = OptionParser(version=__version__)
     parser.add_option('-I', '--input-encoding', metavar='<encoding>',
                       default=INPUT_ENCODING,
@@ -2097,18 +2140,27 @@ def main():
                       help='Output encoding (default: %default)')
     parser.add_option('-o', '--ordered', default=ORDERED,
                       action=toggle(ORDERED), help='Preserve order of filters')
+    parser.add_option('-l', '--line-rendered', default=LINE_RENDER,
+                      action=toggle(LINE_RENDER),
+                      help='try to output each line as it becomes available. '
+                           'Not suitable for some filters.')
     filters = Insub.filter.setup(parser)
     opts, args = parser.parse_args()
 
     # any data provided on the command-line
     data = ' '.join(arg.decode(opts.input_encoding, 'replace') for arg in args)
+    insub = Insub(filters=filters, data=data, **opts.__dict__)
 
-    # process data
-    output = Insub(filters=filters, data=data, **opts.__dict__).rendered
-    if output:
-        print output.encode(opts.output_encoding, 'replace')
+    if opts.line_rendered:
+        for line in insub.line_render():
+            print line.encode(opts.output_encoding, 'replace')
     else:
-        pass
+        output = insub.rendered.encode(opts.output_encoding, 'replace')
+        if not output and not args:
+            parser.print_help()
+        else:
+            print output
+
     return 0
 
 
