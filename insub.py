@@ -28,6 +28,12 @@
 
 """Suite of text filters to annoy people on IRC"""
 
+
+###############
+### IMPORTS ###
+###############
+
+
 from __future__ import with_statement
 from subprocess import Popen, PIPE, STDOUT
 from collections import defaultdict
@@ -49,6 +55,12 @@ try:
 except ImportError:
     pass
 
+
+#################
+### CONSTANTS ###
+#################
+
+# metadeta
 __version__ = '0.1'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
@@ -78,7 +90,12 @@ FIGLET_FLIP = False
 FIGLET_REV = False
 PTY_EXEC = False
 PTY_TIMEOUT = None
-LINE_RENDER = False
+RAINTYPE='rainbow'
+RAINSKEW = 1
+RAINOFFSET = 0
+
+# XXX this could autodetect if it's being run on the commandline
+SCHEME = 'ansi'
 
 # option choices
 FIGLET_DIRS = ('auto', 'left-to-right', 'right-to-left')
@@ -113,6 +130,24 @@ except:
 
 # precompiled regex
 newline_re = re.compile(r'\r?\n')
+
+
+########################
+### HARD-CODED STUFF ###
+########################
+
+# various presets for the rainbow filter
+RAINBOW_MAP = {'rainbow': 'rrRRyyYYGGggccCCBBbbmmMM',
+               'usa': 'RRWWBB',
+               'blue': 'bB',
+               'green': 'gG',
+               'purple': 'mM',
+               'grey': 'Dw',
+               'yellow': 'yY',
+               'red': 'Rr',
+               'scale': 'WWwwCCDDCCww',
+               'xmas': 'Rg',
+               'canada': 'RRWW'}
 
 # list of spook words, stolen from emacs
 SPOOK_PHRASES = (
@@ -169,6 +204,7 @@ UNIFLIP = {8255: 8256, 8261: 8262, 33: 161, 34: 8222, 38: 8523, 39: 44, 40: 41,
 
 # translation map for unibig
 UNIBIG = dict((i, i + 65248) for i in xrange(33, 127))
+UNIBIG[32] = 12288
 
 # ascii flip map if unicode is too much awesome
 ASCIIFLIP = {47: 92, 92: 47,      # / <-> \
@@ -1171,6 +1207,11 @@ STANDARD_FONT = (
         " @@\n")
 
 
+###############################
+### FIGLET RENDERING ENGINE ###
+###############################
+
+
 class FigletFont(object):
 
     """
@@ -1544,6 +1585,333 @@ class Figlet(object):
         return self.engine.render(text)
 
 
+#####################
+### COLOR SUPPORT ###
+#####################
+
+
+class ColorMap(object):
+
+    """Class to manage an ANSI/mIRC color-mapped text string"""
+
+    # mapping by color name
+    colnames = ['black',    # 0
+                'red',      # 1
+                'green',    # 2
+                'yellow',   # 3
+                'blue',     # 4
+                'magenta',  # 5
+                'cyan',     # 6
+                'white']    # 7
+
+    # mapping by color code
+    codes = ['d', 'r', 'g', 'y', 'b', 'm', 'c', 'w']
+
+    # structural data for various color schemes
+    schemes = {'mirc': {'color_re': re.compile('(\x03[0-9,]+\x16*|\x0f)'),
+                        'parse_re': re.compile('\x03([0-9]+)?(?:,([0-9]+))?'),
+                        # map mirc colors to ansi intense/color codes
+                        'map': [(1, 7),    # 0
+                                (0, 0),    # 1
+                                (0, 4),    # 2
+                                (0, 2),    # 3
+                                (1, 1),    # 4
+                                (0, 1),    # 5
+                                (0, 5),    # 6
+                                (0, 3),    # 7
+                                (1, 3),    # 8
+                                (1, 2),    # 9
+                                (0, 6),    # 10
+                                (1, 6),    # 11
+                                (1, 4),    # 12
+                                (1, 5),    # 13
+                                (1, 0),    # 14
+                                (0, 7)]},  # 15
+               'ansi': {'color_re': re.compile('(\x1b\[[0-9;]+m)'),
+                        'parse_re': re.compile('\x1b\[([0-9;]+)')},
+               # dummy entry to handle uncolored text
+               'plain': {'color_re': re.compile('(\xff)'),
+                         'parse_re': re.compile('(\xff)')}}
+
+    # the default color scheme (white on black)
+    reset = (7,  # foreground color
+             0,  # intensity on
+             0,  # background color
+             1)  # default flag indicates color has not changed
+
+    def __init__(self, data=None, scheme=None, encoding=None):
+        """Instantiate a color-mapped text string"""
+
+        # try to determine encoding of source data
+        if not encoding and hasattr(data, 'encoding'):
+            encoding = data.encoding
+        try:
+            encoding = codecs.lookup(encoding).name
+        except:
+            encoding = sys.getdefaultencoding()
+
+        # file-like objects return lines with newlines intact,
+        # other iterables return stripped lines
+        if hasattr(data, 'read'):
+            data = ''.join(data)
+        elif hasattr(data, '__iter__'):
+            data = '\n'.join(data)
+
+        # make sure data is unicode
+        if data is None:
+            data = u''
+        elif isinstance(data, str):
+            data = data.decode(encoding, 'replace')
+        if not isinstance(data, unicode):
+            raise TypeError('unknown data type: %s' % type(data))
+
+        # verify scheme is valid
+        if scheme is None:
+            scheme = self.detect(data)
+        if scheme not in self.schemes:
+            raise ValueError('unknown scheme: %s' % scheme)
+
+        # store decoded version
+        self.plain, self.colmap = self.decode(data, scheme)
+        self.scheme = scheme
+        self.encoding = encoding
+
+    def render(self, scheme=None):
+        if scheme is None:
+            scheme = self.scheme
+        return u'\n'.join(self.encode(self.plain, self.colmap, scheme))
+
+    @classmethod
+    def detect(cls, data):
+        """Try to guess color scheme"""
+        seen = {}
+        for scheme in cls.schemes:
+            seen[scheme] = len(cls.schemes[scheme]['color_re'].findall(data))
+        if sum(seen.values()):
+            return sorted(seen.iteritems(),
+                          key=lambda item: item[1],
+                          reverse=True)[0][0]
+        return 'plain'
+
+    @classmethod
+    def decode(cls, data, scheme):
+        """Returns decoded plain text and its colormap from text"""
+
+        # sanity check inputs
+        if not isinstance(data, unicode):
+            raise TypeError('decode requires unicode data')
+        if scheme not in cls.schemes:
+            raise ValueError('unknown scheme: %s' % scheme)
+
+        # decode
+        plain = []
+        colmap = []
+        attrs = cls.schemes[scheme]
+        for line in data.splitlines():
+            plain_line = []
+            colmap_line = []
+            fg, intense, bg, default = cls.reset
+            for part in attrs['color_re'].split(line):
+                if not part:
+                    continue
+                if attrs['color_re'].match(part):
+                    if part == '\x0f':
+                        fg, intense, bg, default = cls.reset
+                    else:
+                        part = attrs['parse_re'].search(part).groups()
+                        default = 0
+                        if scheme == 'mirc':
+                            new_fg, new_bg = part
+                            if new_fg is not None:
+                                intense, fg = attrs['map'][int(new_fg)]
+                            if new_bg is not None:
+                                bg = attrs['map'][int(new_bg)][1]
+                        elif scheme == 'ansi':
+                            for part in [int(i) for i in part[0].split(';')]:
+                                if part == 0:
+                                    fg, intense, bg, default = cls.reset
+                                elif part == 1:
+                                    intense = 1
+                                elif part in (2, 22):
+                                    intense = 0
+                                elif part == 39:
+                                    fg = cls.reset[0]
+                                elif part == 49:
+                                    bg = cls.reset[2]
+                                elif part >= 30:
+                                    part -= 30
+                                    if part >= 10:
+                                        bg = part - 10
+                                    else:
+                                        fg = part
+                else:
+                    plain_line.append(part)
+                    col = cls.pack(fg, intense, bg, default)
+                    colmap_line.append(col * len(part))
+            plain.append(''.join(plain_line))
+            colmap.append(''.join(colmap_line))
+        return plain, colmap
+
+    @classmethod
+    def encode(cls, lines, colmap, scheme):
+        """Encode in color"""
+
+        # sanity check inputs
+        if scheme not in cls.schemes:
+            raise ValueError('unknown scheme: %s' % scheme)
+
+        # encode
+        attrs = cls.schemes[scheme]
+        output = []
+        for i, line in enumerate(lines):
+            last = list(cls.reset)  # the last color we painted
+            output_line = []        # one fully rendered line
+            for j, ch in enumerate(line):
+
+                # first get the color mapped to this character
+                try:
+                    col = list(cls.unpack(colmap[i][j]))
+                except IndexError:
+                    col = last
+
+                # what's changed?
+                fg_changed = col[0] != last[0]
+                intense_changed = col[1] != last[1]
+                bg_changed = col[2] != last[2]
+
+                # the conditions under which we will need to repaint
+                if (bg_changed or
+                    (ch != ' ' and (fg_changed or intense_changed))):
+
+                    outcol = None
+                    if scheme == 'mirc':
+                        if col[3]:
+                            outcol = '\x0f'
+                        else:
+                            codes = []
+                            if fg_changed or intense_changed:
+                                newcol = attrs['map'].index((col[1], col[0]))
+                                codes.append(str(newcol))
+                            if bg_changed:
+                                if not codes:
+                                    codes.append('')
+                                newcol = attrs['map'].index((0, col[2]))
+                                codes.append(str(newcol))
+                            outcol = '\x03%s' % ','.join(codes)
+                            if (j + 1) < len(line) and line[j + 1].isdigit():
+                                outcol += '\x16\x16'
+                    elif scheme == 'ansi':
+                        codes = []
+                        if col[3]:
+                            codes.append(0)
+                        else:
+                            if fg_changed:
+                                codes.append(col[0] + 30)
+                            if bg_changed:
+                                codes.append(col[2] + 40)
+                            if intense_changed:
+                                if col[1]:
+                                    codes.append(1)
+                                else:
+                                    codes.append(22)
+                        outcol = '\x1b[%sm' % ';'.join(map(str, codes))
+                    if outcol:
+                        last = col
+                        output_line.append(outcol)
+
+                output_line.append(ch)
+            output.append(''.join(output_line))
+        return output
+
+    @classmethod
+    def compile(cls, map):
+        """Compile a letter-coded map into packed version"""
+        compiled = []
+        for ch in map:
+            if ch.isupper():
+                intense = 1
+                ch = ch.lower()
+            else:
+                intense = 0
+            compiled.append(cls.pack(cls.codes.index(ch), intense, default=0))
+        return ''.join(compiled)
+
+    @staticmethod
+    def pack(fg, intense=0, bg=0, default=1):
+        """Pack color -> char"""
+        return chr(fg + (intense << 3) + (bg << 4) + (default << 7))
+
+    @staticmethod
+    def unpack(char):
+        """Unpack color -> (fg, intense, bg, default)"""
+        char = ord(char)
+        return (char & 7), (char & 8) >> 3, (char & 112) >> 4, (char & 128) >> 7
+
+    @classmethod
+    def pack_by_name(cls, name):
+        """Return the packed color value by name"""
+
+        # XXX this whole function should be greatly simplified..
+        # but at least it works, will be useful somewhere i think.
+        name = name.lower()
+        name = name.replace('dark', '')
+        name = name.replace('light', 'bright')
+        name = name.replace('gray', 'grey')
+        name = name.replace('orange', 'bright red')
+        name = name.replace('purple', 'magenta')
+        name = name.split()
+        if 'on' not in name:
+            name += ['on', 'black']
+        on = name.index('on')
+
+        # grey -> bright black
+        # bright grey -> white
+        # white -> bright white
+        def fixgrey(words):
+            if 'grey' in words:
+                if 'bright' in words:
+                    return ['white']
+                else:
+                    return ['bright', 'black']
+            elif 'white' in words:
+                return ['bright', 'white']
+            else:
+                return words
+
+        fg, intense, bg, default = cls.reset
+        for word in fixgrey(name[:on]):
+            if word == 'bright':
+                intense = 1
+                default = 0
+            elif word in cls.colnames:
+                fg = cls.colnames.index(word)
+                default = 0
+        for word in fixgrey(name[on + 1:]):
+            if word in cls.colnames:
+                bg = cls.colnames.index(word)
+                default = 0
+
+        char = cls.pack(fg, intense, bg, default)
+        return char
+
+    def __iter__(self):
+        for line in self.plain:
+            yield line
+
+    def __str__(self):
+        return '\n'.join(self).encode(self.encoding, 'replace')
+
+
+# transform rainbow colormap into compiled version
+RAINBOW_MAP = dict((name, ColorMap.compile(map))
+                   for name, map in RAINBOW_MAP.iteritems())
+
+
+#########################
+### THE ACTUAL SCRIPT ###
+#########################
+
+
 class Insub(object):
 
     """Suite of text filters to annoy people on IRC"""
@@ -1551,48 +1919,36 @@ class Insub(object):
     def __init__(self, **opts):
         self.__dict__.update(opts)
 
-        # XXX this could probably be very simplified
-        # normalize filters
-        filters = []
-        for filter in self.filters:
-            if not isinstance(filter, basestring):
-                filter = filter.__name__
-            filters.append(getattr(self, filter).im_func)
-        self.filters = filters
-
-        # unless specified otherwise, put filters into their natural order
-        if not self.ordered:
+    def render(self, data, filters=None):
+        """Render data using the provided filters"""
+        if isinstance(data, str):
+            data = data.decode(self.input_encoding, 'replace')
+        if filters is None:
             filters = []
-            for func, options in self.__class__.filter.filters:
-                if func in self.filters and func not in filters:
-                    filters.append(func)
-            self.filters = filters
+        if not self.ordered:
+            filters = [func for func, opts in type(self).filter.filters
+                       if func in filters]
 
-    @property
-    def rendered(self):
-        """The rendered data"""
-        lines = self.data.splitlines()
-        for filter in self.filters:
-            lines = list(lines)
+        lines = data.splitlines()
+        for filter in filters:
+            if isinstance(lines, ColorMap):
+                lines, colmap, mapped = lines.plain, lines, True
+            else:
+                mapped = False
             lines = filter(self, lines)
-            lines = list(lines)
-        return u'\n'.join(lines)
+            if mapped:
+                colmap.plain = lines
+                lines = colmap
 
-    def line_render(self):
-        """Try to render each line independently"""
-        for line in self.data.splitlines():
-            lines = [line]
-            for filter in self.filters:
-                lines = filter(self, lines)
-            for line in lines:
-                yield line
+        if isinstance(lines, ColorMap):
+            data = lines.render(scheme=self.scheme)
+        else:
+            data = u'\n'.join(lines)
+        return data.encode(self.output_encoding, 'replace')
 
     class filter(object):
 
-        """
-        Decorator class to handle gluing filters to optparse and
-        preserving natural filter order.
-        """
+        """Decorator to glue filters to optparse and preserv order"""
 
         filters = []
 
@@ -1600,18 +1956,18 @@ class Insub(object):
             self.options = options
 
         def __call__(self, func):
-            self.__class__.filters.append((func, self.options))
+            type(self).filters.append((func, self.options))
             return func
 
         @classmethod
-        def setup(cls, parser):
+        def setup(cls, optparse):
             """Construct options for optparse"""
             filters = []
-            group = parser.add_option_group('Filters')
+            group = optparse.add_option_group('Filters')
 
-            def add_filter(option, key, val, parser, func):
+            def add_filter(option, key, val, optparse, func):
                 if val is not None:
-                    setattr(parser.values, option.dest, val)
+                    setattr(optparse.values, option.dest, val)
                 filters.append(func)
 
             for func, options in cls.filters:
@@ -1631,7 +1987,11 @@ class Insub(object):
 
             return filters
 
-    # filters that control the source text
+
+    ####################################
+    ### FILTERS THAT ADD SOURCE TEXT ###
+    ####################################
+
 
     @filter()
     def ver(self, lines):
@@ -1716,7 +2076,11 @@ class Insub(object):
     def _get_spook(self):
         return u' '.join(random.sample(SPOOK_PHRASES, self.spookwords))
 
-    # filters that change the text content
+
+    #########################################
+    ### FILTERS THAT CHANGE TEXT CONTENTS ###
+    #########################################
+
 
     @filter()
     def jive(self, lines):
@@ -1775,7 +2139,7 @@ class Insub(object):
     def unibig(self, lines):
         """Change ASCII chars to REALLY BIG unichars"""
         for line in lines:
-            yield line.translate(UNIBIG).replace(' ', '  ')
+            yield line.translate(UNIBIG)  #.replace(' ', '  ')
 
     @filter()
     def asciiflip(self, lines):
@@ -1798,7 +2162,11 @@ class Insub(object):
         for line in lines:
             yield line.translate(JIGS_MAP)
 
-    # change the text appearance
+
+    ##############################
+    ### CHANGE TEXT APPEARANCE ###
+    ##############################
+
 
     @filter(sine_height=dict(metavar='<int>', default=SINE_HEIGHT, type='int',
                              help='Height of wave (default: %default)'),
@@ -1978,7 +2346,11 @@ class Insub(object):
         for line in output.splitlines():
             yield line
 
-    # change the text presentation
+
+    ################################
+    ### CHANGE TEXT PRESENTATION ###
+    ################################
+
 
     #@filter() def checker(self, lines): raise NotImplemented
 
@@ -2094,7 +2466,11 @@ class Insub(object):
         elif self.outline_style == '3d':
             yield u'+' + '-' * (size + 2) + '+/'
 
-    # post-processing filters
+
+    ###############################
+    ### POST-PROCESSING FILTERS ###
+    ###############################
+
 
     @filter(dest='prefix_string', metavar='<text>', type='string')
     def prefix(self, lines):
@@ -2118,11 +2494,36 @@ class Insub(object):
 
     # change the final visual appearance
 
-    #@filter() def rainbow(self, lines): raise NotImplemented
+    @filter(raintype=dict(
+                metavar='<%s>' % '|'.join(RAINBOW_MAP),
+                default=RAINTYPE, type='choice', choices=RAINBOW_MAP.keys(),
+                help='rainbow type (default: %default)'),
+            rainskew=dict(
+                metavar='<#>', default=RAINSKEW, type='int',
+                help='Per-line rainbow skew (default: %default)'),
+            rainoffset=dict(
+                metavar='<#>', default=RAINOFFSET, type='int',
+                help='Rainbow offset point (default: %default)'))
+    def rainbow(self, lines):
+        """Make stuff pretty!"""
+        data = ColorMap(lines)
+        offset = self.rainoffset
+        map = RAINBOW_MAP[self.raintype]
+        for j in xrange(len(data.colmap)):
+            data.colmap[j] = ''.join(map[(offset + i) % len(map)]
+                                     for i, ch in enumerate(data.colmap[j]))
+            offset += self.rainskew
+        self.rainoffset = offset % 256
+        return data
+
     #@filter() def tree(self, lines): raise NotImplemented
     #@filter() def blink(self, lines): raise NotImplemented
 
-    # misc utility functions/properties
+
+    ######################
+    ### MISC FUNCTIONS ###
+    ######################
+
 
     @property
     def name(self):
@@ -2131,35 +2532,32 @@ class Insub(object):
 
 
 def main():
-    parser = OptionParser(version=__version__)
-    parser.add_option('-I', '--input-encoding', metavar='<encoding>',
-                      default=INPUT_ENCODING,
-                      help='Input encoding (default: %default)')
-    parser.add_option('-O', '--output-encoding', metavar='<encoding>',
-                      default=OUTPUT_ENCODING,
-                      help='Output encoding (default: %default)')
-    parser.add_option('-o', '--ordered', default=ORDERED,
-                      action=toggle(ORDERED), help='Preserve order of filters')
-    parser.add_option('-l', '--line-rendered', default=LINE_RENDER,
-                      action=toggle(LINE_RENDER),
-                      help='try to output each line as it becomes available. '
-                           'Not suitable for some filters.')
-    filters = Insub.filter.setup(parser)
-    opts, args = parser.parse_args()
+    """CLI-based interface"""
 
-    # any data provided on the command-line
-    data = ' '.join(arg.decode(opts.input_encoding, 'replace') for arg in args)
-    insub = Insub(filters=filters, data=data, **opts.__dict__)
+    # parse commandline options
+    optparse = OptionParser(version=__version__, usage='%prog [opts] [text]')
+    optparse.add_option('-I', '--input-encoding', metavar='<encoding>',
+                        default=INPUT_ENCODING,
+                        help='Input encoding (default: %default)')
+    optparse.add_option('-O', '--output-encoding', metavar='<encoding>',
+                        default=OUTPUT_ENCODING,
+                        help='Output encoding (default: %default)')
+    optparse.add_option('-o', '--ordered', default=ORDERED,
+                        action=toggle(ORDERED),
+                        help='Preserve order of filters')
+    optparse.add_option('-s', '--scheme',
+                        metavar='<%s>' % '|'.join(ColorMap.schemes),
+                        default=SCHEME, type='choice',
+                        choices=ColorMap.schemes.keys(),
+                        help='Color output scheme (default: %default)')
 
-    if opts.line_rendered:
-        for line in insub.line_render():
-            print line.encode(opts.output_encoding, 'replace')
-    else:
-        output = insub.rendered.encode(opts.output_encoding, 'replace')
-        if not output and not args:
-            parser.print_help()
-        else:
-            print output
+    # dynamically add args/options for the filters
+    filters = Insub.filter.setup(optparse)
+    opts, args = optparse.parse_args()
+
+    # render output
+    insub = Insub(**opts.__dict__)
+    print insub.render(' '.join(args), filters)
 
     return 0
 
