@@ -117,6 +117,7 @@ newline_re = re.compile(r'\r?\n')
 
 # various presets for the rainbow filter
 BRUSH_MAP = {'rainbow': 'rrRRyyYYGGggccCCBBbbmmMM',
+             'rain2': 'rRyYGgcCBbmM',
              'usa': 'RRWWBB',
              'blue': 'bB',
              'green': 'gG',
@@ -1092,6 +1093,14 @@ BORK_RULES = [['an', 'un'], ['An', 'Un'], ['au', 'oo'], ['Au', 'Oo'],
 for i, rule in enumerate(BORK_RULES):
     BORK_RULES[i] = re.compile(rule[0]), rule[1]
 
+
+# figlet translation maps
+FIG_REV_MAP = {123: 125, 40: 41, 41: 40, 125: 123, 47: 92, 92: 47, 91: 93,
+               60: 62, 93: 91, 62: 60}
+
+FIG_FLIP_MAP = {65: 86, 98: 80, 118: 94, 119: 109, 109: 119, 77: 87, 47: 92,
+                80: 98, 82: 98, 86: 65, 87: 77, 92: 47, 94: 118, 95: 45}
+
 # standard font to fall back on if figlet isn't installed
 STANDARD_FONT = (
         "flf2a$ 6 5 16 15 0 0 24463 229\n $@\n $@\n $@\n $@\n $@\n $@@\n  _ @"
@@ -1280,50 +1289,6 @@ class FigletFont(object):
             raise Exception('parse error: %s' % error)
 
 
-class FigletString(str):
-
-    """Rendered figlet font"""
-
-    REV_MAP = ('\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f'
-               '\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e'
-               '\x1f !"#$%&\')(*+,-.\\0123456789:;>=<?@ABCDEFGHIJKLMNOPQRSTUV'
-               'WXYZ]/[^_`abcdefghijklmnopqrstuvwxyz}|{~\x7f\x80\x81\x82\x83'
-               '\x84\x85\x86\x87\x88\x89\x8a\x8b\x8c\x8d\x8e\x8f\x90\x91\x92'
-               '\x93\x94\x95\x96\x97\x98\x99\x9a\x9b\x9c\x9d\x9e\x9f\xa0\xa1'
-               '\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xab\xac\xad\xae\xaf\xb0'
-               '\xb1\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xbb\xbc\xbd\xbe\xbf'
-               '\xc0\xc1\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xcb\xcc\xcd\xce'
-               '\xcf\xd0\xd1\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xdb\xdc\xdd'
-               '\xde\xdf\xe0\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xeb\xec'
-               '\xed\xee\xef\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb'
-               '\xfc\xfd\xfe\xff')
-
-    FLIP_MAP = ('\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f'
-                '\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e'
-                '\x1f !"#$%&\'()*+,-.\\0123456789:;<=>?@VBCDEFGHIJKLWNObQbSTU'
-                'AMXYZ[/]v-`aPcdefghijklwnopqrstu^mxyz{|}~\x7f\x80\x81\x82'
-                '\x83\x84\x85\x86\x87\x88\x89\x8a\x8b\x8c\x8d\x8e\x8f\x90\x91'
-                '\x92\x93\x94\x95\x96\x97\x98\x99\x9a\x9b\x9c\x9d\x9e\x9f\xa0'
-                '\xa1\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xab\xac\xad\xae\xaf'
-                '\xb0\xb1\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xbb\xbc\xbd\xbe'
-                '\xbf\xc0\xc1\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xcb\xcc\xcd'
-                '\xce\xcf\xd0\xd1\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xdb\xdc'
-                '\xdd\xde\xdf\xe0\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xeb'
-                '\xec\xed\xee\xef\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa'
-                '\xfb\xfc\xfd\xfe\xff')
-
-    def reverse(self):
-        return self.new(''.join(reversed(line))
-                        for line in self.translate(self.REV_MAP).splitlines())
-
-    def flip(self):
-        return self.new(row.translate(self.FLIP_MAP)
-                        for row in reversed(self.splitlines()))
-
-    def new(self, seq):
-        return FigletString('\n'.join(seq) + '\n')
-
-
 class FigletRenderingEngine(object):
 
     """
@@ -1389,31 +1354,31 @@ class FigletRenderingEngine(object):
                 return left
 
         if self.base.Font.smush_mode & self.SM_LOWLINE:
-            if left == '_' and right in r'|/\[]{}()<>':
+            if left == '_' and right.plain in r'|/\[]{}()<>':
                 return right
-            if right == '_' and left  in r'|/\[]{}()<>':
+            if right == '_' and left.plain in r'|/\[]{}()<>':
                 return left
 
         if self.base.Font.smush_mode & self.SM_HIERARCHY:
-            if left == '|' and right in r'|/\[]{}()<>':
+            if left == '|' and right.plain in r'|/\[]{}()<>':
                 return right
-            if right == '|' and left  in r'|/\[]{}()<>':
+            if right == '|' and left.plain in r'|/\[]{}()<>':
                 return left
-            if left in r'\/' and right in '[]{}()<>':
+            if left.plain in r'\/' and right.plain in '[]{}()<>':
                 return right
-            if right in r'\/' and left  in '[]{}()<>':
+            if right.plain in r'\/' and left.plain in '[]{}()<>':
                 return left
-            if left in '[]' and right in '{}()<>':
+            if left.plain in '[]' and right.plain in '{}()<>':
                 return right
-            if right in '[]' and left  in '{}()<>':
+            if right.plain in '[]' and left.plain in '{}()<>':
                 return left
-            if left in '{}' and right in '()<>':
+            if left.plain in '{}' and right.plain in '()<>':
                 return right
-            if right in '{}' and left  in '()<>':
+            if right.plain in '{}' and left.plain in '()<>':
                 return left
-            if left in '()' and right in '<>':
+            if left.plain in '()' and right.plain in '<>':
                 return right
-            if right in '()' and left  in '<>':
+            if right.plain in '()' and left.plain in '<>':
                 return left
 
         if self.base.Font.smush_mode & self.SM_PAIR:
@@ -1476,10 +1441,12 @@ class FigletRenderingEngine(object):
         """Render an ASCII text string in figlet"""
         self.cur_width = self.prev_width = 0
         buf = []
-        for c in map(ord, text):
+        for ch in text:
+            c = ord(ch.plain)
             if c not in self.base.Font.chars:
                 continue
             cur_char = self.base.Font.chars[c]
+            cur_char = [colstr(plain).fill(ch.colmap) for plain in cur_char]
             self.cur_width = self.base.Font.width[c]
             if not len(buf):
                 buf = ['' for i in xrange(self.base.Font.height)]
@@ -1495,16 +1462,16 @@ class FigletRenderingEngine(object):
                     try:
                         left = add_left[len(add_left) - max_smush + i]
                     except:
-                        left = ''
+                        left = colstr()
                     right = add_right[i]
                     smushed = self.smush_chars(left, right)
                     try:
                         l = list(add_left)
                         l[len(l) - max_smush + i] = smushed
-                        add_left = ''.join(l)
+                        add_left = colstr().join(l)
                     except:
                         pass
-                buf[row] = add_left + add_right[max_smush:]
+                buf[row] = colstr(add_left) + add_right[max_smush:]
             self.prev_width = self.cur_width
 
         # justify text. This does not use str.rjust/str.center
@@ -1518,10 +1485,7 @@ class FigletRenderingEngine(object):
                 buf[row] = (' ' * int((self.base.width - len(buf[row])) /
                             2) + buf[row])
 
-        # return rendered ASCII with hardblanks replaced
-        buf = '\n'.join(buf) + '\n'
-        buf = buf.replace(self.base.Font.hard_blank, ' ')
-        return FigletString(buf)
+        return [line.replace(self.base.Font.hard_blank, ' ') for line in buf]
 
 
 class Figlet(object):
@@ -1904,6 +1868,10 @@ class colstr(object):
         char = ord(char)
         return ((char & 7), (char & 8) >> 3,
                 (char & 112) >> 4, (char & 128) >> 7)
+
+    def fill(S, bg):
+        """Returns new colstr with color filled with bg"""
+        return S.clone(None, bg * len(S))
 
     #########################################################
     ### UTILITY CLASS METHODS NOT USED BY THE COLSTR TYPE ###
@@ -2604,21 +2572,13 @@ class colstr(object):
         parts.append(x)
         return x.clone('').join(parts)
 
-    def __rmod__(self, *args, **kwargs):
+    def __rmod__(x, y):
         """x.__rmod__(y) <==> y%x"""
-        # XXX near as I can figure, this would only ever get called in a
-        # modulo operation where the item on the LEFT did not have
-        # __mod__ defined.. which in any conceivable context would
-        # probably be integers, and I can't imagine what this object
-        # would do in that case except explode, so:
-        raise NotImplementedError
+        # could be useful somewhere
+        return y % len(x)
 
     def format(self, *args, **kwargs):
         """S.format(*args, **kwargs) -> colstr"""
-        # XXX i'm not even sure what this does offhand, and it doesn't
-        # have a docstring,  so i think it's safe to assume nothing in
-        # my scripts will be needing it.. possibly a hook for the
-        # new-style string formatting rules?
         raise NotImplementedError
 
 
@@ -2798,7 +2758,7 @@ class Insub(object):
     @filter()
     def jive(self, lines):
         """Make speech more funky"""
-        notyet()
+        raise NotImplementedError('needs colstr() implementation')
         for line in lines:
             for search, replace in JIVE_RULES:
                 line = search.sub(replace, line)
@@ -2807,7 +2767,7 @@ class Insub(object):
     @filter()
     def bork(self, lines):
         """Make speech more swedish"""
-        notyet()
+        raise NotImplementedError('needs colstr() implementation')
         for line in lines:
             new = []
             for word in line.split():
@@ -2966,18 +2926,16 @@ class Insub(object):
             figlet_flip=dict(default=FIGLET_FLIP, action=toggle(FIGLET_FLIP),
                              help='Flip font (default: %default)'))
     def figlet(self, lines):
-        notyet()
         figlet = Figlet(prefix=self.figlet_path,
                         font=self.figlet_font,
                         direction=self.figlet_direction,
                         justify=self.figlet_justify)
-        response = figlet.render(' '.join(lines))
+        lines = figlet.render(colstr(' ').join(lines))
         if self.figlet_reverse:
-            response = response.reverse()
+            lines = [line.translate(FIG_REV_MAP).reverse() for line in lines]
         if self.figlet_flip:
-            response = response.flip()
-        for line in response.splitlines():
-            yield unicode(line)
+            lines = [line.translate(FIG_FLIP_MAP) for line in reversed(lines)]
+        return lines
 
     @filter(banner_width=dict(metavar='<int>', default=BANNER_WIDTH, type='int',
                               help='Font width (default: %default)'),
@@ -3048,7 +3006,7 @@ class Insub(object):
     @filter(dest='wrap_width', metavar='<width>', type='int')
     def wrap(self, lines):
         """Wrap text"""
-        notyet()
+        raise NotImplementedError('needs colstr() implementation')
         for line in textwrap.wrap(' '.join(lines), width=self.wrap_width):
             yield line
 
@@ -3293,10 +3251,6 @@ def main():
     print insub.render(' '.join(args), filters)
 
     return 0
-
-
-def notyet():
-    raise NotImplementedError('needs colstr() implementation')
 
 
 if __name__ == '__main__':
