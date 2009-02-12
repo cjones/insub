@@ -2378,6 +2378,7 @@ class colstr(object):
 
         Return a string which is the concatenation of the strings in the
         sequence.  The separator between elements is S."""
+        sequence = list(sequence)  # in case it's a generator
         return S.clone(S.plain.join(item.plain for item in sequence),
                        S.colmap.join(item.colmap for item in sequence))
 
@@ -2420,9 +2421,11 @@ class colstr(object):
         orig_size = len(S.plain)
         new = S.clone()
         if isinstance(chars, colstr):
-            charrs = chars.plain
+            chars = chars.plain
         new.plain = new.plain.rstrip(chars)
-        new.colmap = new.colmap[:(orig_size - len(new.plain)) * -1]
+        x = (orig_size - len(new.plain)) * -1
+        if x < 0:
+            new.colmap = new.colmap[:x]
         return new
 
     def expandtabs(S, tabsize=8):
@@ -2484,6 +2487,10 @@ class colstr(object):
     # the new piece or the part it's replacing).  This could be made an
     # attribute of the colstr() as a default behavior so that we can
     # avoid adding more non-str/unicode items to the interface.
+
+    def reverse(S):
+        """S.reverse(S) -> colstr"""
+        return S.clone('').join(reversed(S))
 
     @coerce
     def translate(S, table):
@@ -2642,10 +2649,11 @@ class Insub(object):
             filters = [func for func, opts in type(self).filter.filters
                        if func in filters]
 
-        lines = data.splitlines()
+        lines = colstr(data).splitlines()
         for filter in filters:
             lines = filter(self, lines)
-        data = u'\n'.join(lines)
+
+        data = colstr('\n').join(lines).render('ansi')
         return data.encode(self.output_encoding, 'replace')
 
     class filter(object):
@@ -2698,7 +2706,7 @@ class Insub(object):
     @filter()
     def ver(self, lines):
         """Display our version"""
-        yield u'%s %s' % (self.name, __version__)
+        yield colstr('%s %s' % (self.name, __version__))
         for line in lines:
             yield line
 
@@ -2706,7 +2714,7 @@ class Insub(object):
     def stdin(self, lines):
         """Add input from STDIN to data to process"""
         for line in sys.stdin:
-            yield line.rstrip().decode(self.input_encoding, 'replace')
+            yield colstr(line.rstrip().decode(self.input_encoding, 'replace'))
         for line in lines:
             yield line
 
@@ -2717,7 +2725,7 @@ class Insub(object):
     def execute(self, lines):
         """Execute args and add data to the output"""
         for line in lines:
-            line = line.encode(self.output_encoding, 'replace')
+            line = line.plain.encode(self.output_encoding, 'replace')
             cmd = shlex.split(line)
 
             # fake a pty for stuff that likes to buffer output.. this
@@ -2739,7 +2747,8 @@ class Insub(object):
                                 raise
                     if not data:
                         data = ''.join(rbuf)
-                        yield data.decode(self.input_encoding, 'replace')
+                        yield colstr(data.decode(self.input_encoding,
+                                                 'replace'))
                         break
                     rbuf.append(data)
                     if '\n' in data:
@@ -2747,22 +2756,25 @@ class Insub(object):
                         lines = newline_re.split(data)
                         rbuf = [lines.pop()]
                         for line in lines:
-                            yield line.decode(self.input_encoding, 'replace')
+                            yield colstr(line.decode(self.input_encoding,
+                                                     'replace'))
                 os.close(fd)
                 os.waitpid(pid, 0)
             else:
                 # the more cross-platform way of doing this
                 process = Popen(cmd, stdout=PIPE, stderr=STDOUT)
                 for line in process.stdout:
-                    yield line.rstrip().decode(self.input_encoding, 'replace')
+                    yield colstr(line.rstrip().decode(self.input_encoding,
+                                                      'replace'))
 
     @filter()
     def slurp(self, lines):
         """Read from files and add data to output"""
         for line in lines:
-            with open(line, 'r') as fp:
+            with open(line.plain, 'r') as fp:
                 for line in fp:
-                    yield line.rstrip().decode(self.input_encoding, 'replace')
+                    yield colstr(line.rstrip().decode(self.input_encoding,
+                                                      'replace'))
 
     @filter(spookwords=dict(metavar='<#>', default=SPOOKWORDS, type='int',
                             help='Spook words to use (default: %default)'))
@@ -2770,10 +2782,10 @@ class Insub(object):
         """Get NSA's attention"""
         lines = list(lines)
         if not lines:
-            yield self._get_spook()
+            yield colstr(self._get_spook())
         else:
             for line in lines:
-                yield u' '.join([self._get_spook(), line])
+                yield colstr(u' ').join([self._get_spook(), line])
 
     def _get_spook(self):
         return u' '.join(random.sample(SPOOK_PHRASES, self.spookwords))
@@ -2787,6 +2799,7 @@ class Insub(object):
     @filter()
     def jive(self, lines):
         """Make speech more funky"""
+        notyet()
         for line in lines:
             for search, replace in JIVE_RULES:
                 line = search.sub(replace, line)
@@ -2795,6 +2808,7 @@ class Insub(object):
     @filter()
     def bork(self, lines):
         """Make speech more swedish"""
+        notyet()
         for line in lines:
             new = []
             for word in line.split():
@@ -2816,9 +2830,9 @@ class Insub(object):
                     first = word.pop(0)
                     last = word.pop()
                     random.shuffle(word)
-                    word = first + u''.join(word) + last
+                    word = first + colstr().join(word) + last
                 new.append(word)
-            yield ' '.join(new)
+            yield colstr(' ').join(new)
 
     @filter()
     def leet(self, lines):
@@ -2826,10 +2840,10 @@ class Insub(object):
         for line in lines:
             new = []
             for ch in line:
-                if ch in LEET_MAP:
-                    ch = random.choice(LEET_MAP[ch])
+                if ch.plain in LEET_MAP:
+                    ch = ch.clone(random.choice(LEET_MAP[ch.plain]), ch.colmap)
                 new.append(ch)
-            yield u''.join(new)
+            yield colstr().join(new)
 
     @filter()
     def uniflip(self, lines):
@@ -2841,7 +2855,7 @@ class Insub(object):
     def unibig(self, lines):
         """Change ASCII chars to REALLY BIG unichars"""
         for line in lines:
-            yield line.translate(UNIBIG)  #.replace(' ', '  ')
+            yield line.translate(UNIBIG)
 
     @filter()
     def asciiflip(self, lines):
@@ -2853,10 +2867,9 @@ class Insub(object):
     def mirror(self, lines):
         """Mirror image text"""
         lines = list(lines)
-        size = len(max(lines, key=len))
+        size = max(len(line) for line in lines)
         for line in lines:
-            line = line.translate(MIRROR_MAP)
-            yield u' ' * (size - len(line)) + u''.join(reversed(line))
+            yield line.translate(MIRROR_MAP).reverse().rjust(size)
 
     @filter()
     def jigs(self, lines):
@@ -2879,7 +2892,7 @@ class Insub(object):
                                  repr(SINE_BG)))
     def sine(self, lines):
         """Arrange text in a sine wave pattern"""
-        out = defaultdict(unicode)
+        out = defaultdict(colstr)
         line_num = 0
         for line in lines:
             width = len(line) * self.sine_freq
@@ -2899,17 +2912,18 @@ class Insub(object):
                         out[line_num] += self.sine_bg
                     x += self.sine_freq
                 line_num += 1
-        bg_re = re.compile('^' + re.escape(self.sine_bg) + '+$')
-        for i, line in sorted(out.iteritems()):
-            if not bg_re.search(line):
+        lines = [item[1] for item in sorted(out.iteritems())]
+        empty = self.sine_bg * max(len(line) for line in lines)
+        for line in lines:
+            if line != empty:
                 yield line
 
     @filter()
     def diagonal(self, lines):
         """Arrange text diagonally"""
         for line in lines:
-            for i in xrange(len(line)):
-                yield ' ' * i + line[i]
+            for i, ch in enumerate(line):
+                yield colstr(' ') * i + ch
 
     @filter()
     def slope(self, lines):
@@ -2917,7 +2931,7 @@ class Insub(object):
         for line in lines:
             spacer = 0
             for word in line.split():
-                yield ' ' * spacer + word
+                yield colstr(' ') * spacer + word
                 spacer += len(word)
 
     @filter(matrix_size=dict(metavar='<int>', default=MATRIX_SIZE, type='int',
@@ -2927,12 +2941,12 @@ class Insub(object):
                                 help='Matrix spacing (default: %default)'))
     def matrix(self, lines):
         """Arrange text in a matrix"""
-        data = ' '.join(lines)
-        out = defaultdict(unicode)
+        data = colstr(' ').join(lines)
+        out = defaultdict(colstr)
         for i in xrange(0, len(data), self.matrix_size):
             chunk = data[i:i + self.matrix_size]
             for j in xrange(len(chunk)):
-                out[j] += chunk[j] + ' ' * self.matrix_spacing
+                out[j] += chunk[j] + colstr(' ') * self.matrix_spacing
         for i, line in sorted(out.iteritems()):
             yield line
 
@@ -2953,6 +2967,7 @@ class Insub(object):
             figlet_flip=dict(default=FIGLET_FLIP, action=toggle(FIGLET_FLIP),
                              help='Flip font (default: %default)'))
     def figlet(self, lines):
+        notyet()
         figlet = Figlet(prefix=self.figlet_path,
                         font=self.figlet_font,
                         direction=self.figlet_direction,
@@ -2976,20 +2991,20 @@ class Insub(object):
     def banner(self, lines):
         """Convert text to banner text"""
         output = []
-        newline = self.banner_bg * 132
-        for ch in ' '.join(lines):
-            if ch in BANNER_RULES:
+        newline = colstr(self.banner_bg) * 132
+        for ch in colstr(' ').join(lines):
+            if ch.plain in BANNER_RULES:
                 line = list(newline)
                 i = 0
-                while i < len(BANNER_RULES[ch]):
-                    x = BANNER_RULES[ch][i]
+                while i < len(BANNER_RULES[ch.plain]):
+                    x = BANNER_RULES[ch.plain][i]
                     if x >= 128:
-                        output += [''.join(line)] * (x & 63)
+                        output += [colstr().join(line)] * (x & 63)
                         line = list(newline)
                         i += 1
                     else:
-                        n = BANNER_RULES[ch][i + 1]
-                        line[x:x + n] = self.banner_fg * n
+                        n = BANNER_RULES[ch.plain][i + 1]
+                        line[x:x + n] = ch.clone(self.banner_fg) * n
                         i += 2
 
         # scale font to width
@@ -3000,7 +3015,7 @@ class Insub(object):
                 for j, ch in enumerate(line):
                     if not j % scale:
                         scaled.append(ch)
-                yield u''.join(scaled)
+                yield colstr().join(scaled)
 
     @filter(hug_size=dict(metavar='<int>', default=HUG_SIZE, type='int',
                           help='How many hugs (default: %default)'),
@@ -3009,20 +3024,23 @@ class Insub(object):
     def hug(self, lines):
         """Add hugs around the text"""
         lines = list(lines)
-        size = len(max(lines, key=len))
-        left = self.hug_chars[0] * self.hug_size
-        right = self.hug_chars[1] * self.hug_size
+        size = max(len(line) for line in lines)
+        left = colstr(self.hug_chars[0]) * self.hug_size
+        right = colstr(self.hug_chars[1]) * self.hug_size
         for line in lines:
-            yield '%s %s %s' % (left, line.center(size), right)
+            yield colstr('%s %s %s') % (left, line.center(size), right)
 
     @filter()
     def rotate(self, lines):
         """Rotate text 90 degrees"""
+        # XXX this can't possibly be rotating 90 degrees because two
+        # invocations put it back to normal.. but it's not 180 either.. so
+        # yeah, something isn't really working here is it.
         lines = list(lines)
-        size = len(max(lines, key=len))
-        new = defaultdict(str)
+        size = max(len(line) for line in lines)
+        new = defaultdict(colstr)
         for line in reversed(lines):
-            line = line.center(size)
+            line = line.ljust(size)
             for i, ch in enumerate(reversed(line)):
                 new[i] += ch
         for i, line in sorted(new.iteritems(), key=lambda item: item[0]):
@@ -3031,15 +3049,16 @@ class Insub(object):
     @filter(dest='wrap_width', metavar='<width>', type='int')
     def wrap(self, lines):
         """Wrap text"""
+        notyet()
         for line in textwrap.wrap(' '.join(lines), width=self.wrap_width):
             yield line
 
     @filter()
     def chalkboard(self, lines):
         """Put text onto bart's chalkboard"""
-        data = (' '.join(lines) + ' ').upper().replace('*', '')
+        data = (colstr(' ').join(lines) + colstr(' ')).upper().replace('*', '')
         i = 0
-        output = CHALKBOARD
+        output = colstr(CHALKBOARD)
         while output.count('*'):
             output = output.replace('*', data[i], 1)
             i += 1
@@ -3084,7 +3103,7 @@ class Insub(object):
                 with open(path, 'r') as fp:
                     template = fp.read()
 
-        # extract the actual cow from perl crap
+        # extract the actual cow from perl garbage
         cow = []
         in_cow = False
         for line in template.splitlines():
@@ -3100,14 +3119,19 @@ class Insub(object):
         elif self.cow_style == 'think':
             thoughts = 'o'
         cow = re.sub(r'\\(.)', r'\1', cow)
+
+        # make it a COLOR-AWARE COW before constructing the thought bubble.
+        # this allows all kinds of great things, like.. making the tongue red.
+        cow = colstr(cow)
+
         cow = cow.replace('$thoughts', thoughts)
         cow = cow.replace('$eyes', self.cow_eyes)
         cow = cow.replace('$tongue', self.cow_tongue)
 
         # construct the thought bubble
         lines = list(lines)
-        size = len(max(lines, key=len))
-        yield u' ' + '_' * (size + 2) + ' '
+        size = max(len(line) for line in lines)
+        yield colstr(' %s ' % ('_' * (size + 2)))
         for i, line in enumerate(lines):
             if self.cow_style == 'think':
                 left, right = '(', ')'
@@ -3120,8 +3144,8 @@ class Insub(object):
                     left, right = '\\', '/'
                 else:
                     left = right = '|'
-            yield u'%s %s %s' % (left, line.ljust(size), right)
-        yield u' ' + '-' * (size + 2) + ' '
+            yield colstr('%s %s %s') % (left, line.ljust(size), right)
+        yield colstr(' %s ' % ('-' * (size + 2)))
 
         # yield the cow
         for line in cow.splitlines():
@@ -3141,32 +3165,28 @@ class Insub(object):
     def outline(self, lines):
         """Draw an outline around text"""
         lines = list(lines)
-        size = len(max(lines, key=len))
+        size = max(len(line) for line in lines)
 
         # top part
         if self.outline_style == 'arrow':
-            yield u'\\' + 'v' * (size + 2) + '/'
+            yield colstr('\\' + 'v' * (size + 2) + '/')
             left, right = '>', '<'
+            bottom = colstr('/' + '^' * (size + 2) + '\\')
         elif self.outline_style == 'box':
-            yield u'+' + '-' * (size + 2) + '+'
+            yield colstr('+' + '-' * (size + 2) + '+')
             left = right = '|'
+            bottom = colstr('+' + '-' * (size + 2) + '+')
         elif self.outline_style == '3d':
-            yield u'  ' + '_' * (size + 3)
-            yield u' /' + ' ' * (size + 2) + '/|'
-            yield u'+' + '-' * (size + 2) + '+ |'
+            yield colstr('  ' + '_' * (size + 3))
+            yield colstr(' /' + ' ' * (size + 2) + '/|')
+            yield colstr('+' + '-' * (size + 2) + '+ |')
             left, right = '|', '| |'
+            bottom = colstr('+' + '-' * (size + 2) + '+/')
 
-        # text part
         for line in lines:
-            yield u'%s %s%s %s' % (left, line, ' ' * (size - len(line)), right)
-
-        # bottom part
-        if self.outline_style == 'arrow':
-            yield u'/' + '^' * (size + 2) + '\\'
-        elif self.outline_style == 'box':
-            yield u'+' + '-' * (size + 2) + '+'
-        elif self.outline_style == '3d':
-            yield u'+' + '-' * (size + 2) + '+/'
+            yield colstr('%s %s%s %s') % (
+                    left, line, ' ' * (size - len(line)), right)
+        yield bottom
 
 
     ###############################
@@ -3178,7 +3198,7 @@ class Insub(object):
     def prefix(self, lines):
         """Prepend text to each line"""
         for line in lines:
-            yield self.prefix_string + line
+            yield colstr(self.prefix_string) + line
 
     @filter(dest='postfix_string', metavar='<text>', type='string')
     def postfix(self, lines):
@@ -3208,6 +3228,7 @@ class Insub(object):
                 help='Rainbow offset point (default: %default)'))
     def rainbow(self, lines):
         """Make stuff pretty!"""
+        notyet()
         data = colstr(lines)
         offset = self.rainoffset
         map = RAINBOW_MAP[self.raintype]
@@ -3261,6 +3282,9 @@ def main():
 
     return 0
 
+
+def notyet():
+    raise NotImplementedError('needs colstr() implementation')
 
 if __name__ == '__main__':
     sys.exit(main())
