@@ -60,7 +60,9 @@ __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
 
 # defaults
-ORDERED = False
+INPUT_ENCODING = 'utf-8'
+OUTPUT_ENCODING = 'utf-8'
+ORDERED = True
 SPOOKWORDS = 5
 SINE_HEIGHT = 5
 SINE_FREQ = 0.3
@@ -84,11 +86,10 @@ FIGLET_FLIP = False
 FIGLET_REV = False
 PTY_EXEC = False
 PTY_TIMEOUT = None
-RAINTYPE='rainbow'
-RAINSKEW = 1
-RAINOFFSET = 0
-
-# XXX this could autodetect if it's being run on the commandline
+BRUSHTYPE='rainbow'
+BRUSHSKEW = 1
+BRUSHOFFSET = 0
+FORCEPAINT = False
 SCHEME = 'ansi'
 
 # option choices
@@ -111,32 +112,21 @@ def find_share(name):
 FIGLET_PATH = find_share('figlet')
 COW_PATH = find_share('cows')
 
-# default encodings to use XXX might just default to utf8
-try:
-    INPUT_ENCODING = codecs.lookup(sys.stdin.encoding).name
-except:
-    INPUT_ENCODING = sys.getdefaultencoding()
-
-try:
-    OUTPUT_ENCODING = codecs.lookup(sys.stdout.encoding).name
-except:
-    OUTPUT_ENCODING = sys.getdefaultencoding()
-
 # precompiled regex
 newline_re = re.compile(r'\r?\n')
 
 # various presets for the rainbow filter
-RAINBOW_MAP = {'rainbow': 'rrRRyyYYGGggccCCBBbbmmMM',
-               'usa': 'RRWWBB',
-               'blue': 'bB',
-               'green': 'gG',
-               'purple': 'mM',
-               'grey': 'Dw',
-               'yellow': 'yY',
-               'red': 'Rr',
-               'scale': 'WWwwCCDDCCww',
-               'xmas': 'Rg',
-               'canada': 'RRWW'}
+BRUSH_MAP = {'rainbow': 'rrRRyyYYGGggccCCBBbbmmMM',
+             'usa': 'RRWWBB',
+             'blue': 'bB',
+             'green': 'gG',
+             'purple': 'mM',
+             'grey': 'Dw',
+             'yellow': 'yY',
+             'red': 'Rr',
+             'scale': 'WWwwCCDDCCww',
+             'xmas': 'Rg',
+             'canada': 'RRWW'}
 
 # list of spook words, stolen from emacs
 SPOOK_PHRASES = (
@@ -1758,6 +1748,15 @@ class colstr(object):
         """Packed reset character"""
         return self.pack(*self.reset)
 
+    @property
+    def nocolor_char(self):
+        """Packed do-not-color character"""
+
+        # pretty much any color combination is invalid if the
+        # default flag is set, this one is given special significance
+        # for apps because it packs to \xFF.
+        return self.pack(7, 1, 7, 1)
+
     #####################
     ### CLASS METHODS ###
     #####################
@@ -2624,8 +2623,8 @@ class colstr(object):
 
 
 # transform rainbow colormap into compiled version
-RAINBOW_MAP = dict((name, colstr.compile(map))
-                   for name, map in RAINBOW_MAP.iteritems())
+BRUSH_MAP = dict((name, colstr.compile(map))
+                 for name, map in BRUSH_MAP.iteritems())
 
 
 #########################
@@ -2653,7 +2652,7 @@ class Insub(object):
         for filter in filters:
             lines = filter(self, lines)
 
-        data = colstr('\n').join(lines).render('ansi')
+        data = colstr('\n').join(lines).render(self.scheme)
         return data.encode(self.output_encoding, 'replace')
 
     class filter(object):
@@ -3216,28 +3215,41 @@ class Insub(object):
 
     # change the final visual appearance
 
-    @filter(raintype=dict(
-                metavar='<%s>' % '|'.join(RAINBOW_MAP),
-                default=RAINTYPE, type='choice', choices=RAINBOW_MAP.keys(),
-                help='rainbow type (default: %default)'),
-            rainskew=dict(
-                metavar='<#>', default=RAINSKEW, type='int',
-                help='Per-line rainbow skew (default: %default)'),
-            rainoffset=dict(
-                metavar='<#>', default=RAINOFFSET, type='int',
-                help='Rainbow offset point (default: %default)'))
-    def rainbow(self, lines):
+    @filter()
+    def nocolor(self, lines):
+        """Mark text in buffer as uncolorable"""
+        for line in lines:
+            yield line.clone(None, line.nocolor_char * len(line))
+
+    @filter(brush=dict(
+                dest='brushes', metavar='<%s>' % '|'.join(BRUSH_MAP),
+                action='append',
+                help='Change paint brush (default: %s)' % BRUSHTYPE),
+            brushskew=dict(
+                metavar='<#>', default=BRUSHSKEW, type='int',
+                help='Per-line brush skew (default: %default)'),
+            brushoffset=dict(
+                metavar='<#>', default=BRUSHOFFSET, type='int',
+                help='Brush offset point (default: %default)'),
+            forcepaint=dict(
+                default=FORCEPAINT, action=toggle(FORCEPAINT),
+                help='Paint over already colored chars (default: %default)'))
+    def paint(self, lines):
         """Make stuff pretty!"""
-        notyet()
-        data = colstr(lines)
-        offset = self.rainoffset
-        map = RAINBOW_MAP[self.raintype]
-        for j in xrange(len(data.colmap)):
-            data.colmap[j] = ''.join(map[(offset + i) % len(map)]
-                                     for i, ch in enumerate(data.colmap[j]))
-            offset += self.rainskew
-        self.rainoffset = offset % 256
-        return data
+        offset = self.brushoffset
+        if self.brushes is None:
+            self.brushes = [BRUSHTYPE]
+        self.brushtype = self.brushes.pop()
+        map = BRUSH_MAP[self.brushtype]
+        for line in lines:
+            new = []
+            for i, ch in enumerate(line):
+                if ch.colmap == ch.reset_char:
+                    ch.colmap = map[(offset + i) % len(map)]
+                new.append(ch)
+            offset += self.brushskew
+            yield colstr().join(new)
+        self.brushoffset = offset % 256
 
     #@filter() def tree(self, lines): raise NotImplemented
     #@filter() def blink(self, lines): raise NotImplemented
@@ -3265,7 +3277,7 @@ def main():
                         help='Output encoding (default: %default)')
     optparse.add_option('-o', '--ordered', default=ORDERED,
                         action=toggle(ORDERED),
-                        help='Preserve order of filters')
+                        help='Automatically order filters')
     optparse.add_option('-s', '--scheme',
                         metavar='<%s>' % '|'.join(colstr.schemes),
                         default=SCHEME, type='choice',
@@ -3285,6 +3297,7 @@ def main():
 
 def notyet():
     raise NotImplementedError('needs colstr() implementation')
+
 
 if __name__ == '__main__':
     sys.exit(main())
