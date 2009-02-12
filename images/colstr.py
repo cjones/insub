@@ -811,6 +811,7 @@ class colstr(object):
 
         Return a string which is the concatenation of the strings in the
         sequence.  The separator between elements is S."""
+        sequence = list(sequence)  # in case it's a generator
         return S.clone(S.plain.join(item.plain for item in sequence),
                        S.colmap.join(item.colmap for item in sequence))
 
@@ -853,9 +854,11 @@ class colstr(object):
         orig_size = len(S.plain)
         new = S.clone()
         if isinstance(chars, colstr):
-            charrs = chars.plain
+            chars = chars.plain
         new.plain = new.plain.rstrip(chars)
-        new.colmap = new.colmap[:(orig_size - len(new.plain)) * -1]
+        x = (orig_size - len(new.plain)) * -1
+        if x < 0:
+            new.colmap = new.colmap[:x]
         return new
 
     def expandtabs(S, tabsize=8):
@@ -917,6 +920,10 @@ class colstr(object):
     # the new piece or the part it's replacing).  This could be made an
     # attribute of the colstr() as a default behavior so that we can
     # avoid adding more non-str/unicode items to the interface.
+
+    def reverse(S):
+        """S.reverse(S) -> colstr"""
+        return S.clone('').join(reversed(S))
 
     @coerce
     def translate(S, table):
