@@ -2597,6 +2597,7 @@ class Insub(object):
 
     def __init__(self, **opts):
         self.__dict__.update(opts)
+        self.stack = []
 
     def render(self, data, filters=None):
         """Render data using the provided filters"""
@@ -2610,7 +2611,19 @@ class Insub(object):
 
         lines = colstr(data).splitlines()
         for filter in filters:
-            lines = filter(self, lines)
+            if isinstance(filter, basestring):
+                if isinstance(filter, str):
+                    filter = filter.decode(self.input_encoding, 'replace')
+                    filter = colstr(filter)
+                lines = list(lines)
+                lines.append(filter)
+            elif filter is ACTION_PUSH:
+                self.stack.append(lines)
+                lines = []
+            elif filter is ACTION_POP:
+                lines = list(lines) + list(self.stack.pop())
+            else:
+                lines = filter(self, lines)
 
         data = colstr('\n').join(lines).render(self.scheme)
         return data.encode(self.output_encoding, 'replace')
@@ -2629,9 +2642,10 @@ class Insub(object):
             return func
 
         @classmethod
-        def setup(cls, optparse):
+        def setup(cls, optparse, filters=None):
             """Construct options for optparse"""
-            filters = []
+            if filters is None:
+                filters = []
             group = optparse.add_option_group('Filters')
 
             def add_filter(option, key, val, optparse, func):
@@ -3221,6 +3235,8 @@ class Insub(object):
         """Name of the script"""
         return os.path.basename(sys.argv[0])
 
+ACTION_PUSH = 1
+ACTION_POP = 2
 
 def main():
     """CLI-based interface"""
@@ -3242,8 +3258,28 @@ def main():
                         choices=colstr.schemes.keys(),
                         help='Color output scheme (default: %default)')
 
+    # append text mid-stream  XXX this doesn't fit in with filter() model
+    filters = []
+    def append(option, key, val, optparse, action):
+        if action is ACTION_PUSH:
+            val = ACTION_PUSH
+        elif action is ACTION_POP:
+            val = ACTION_POP
+        filters.append(val)
+
+    optparse.add_option('-a', '--append', metavar='<text>', action='callback',
+                        callback=append, type='string', callback_args=(None,),
+                        help='Insert text into stream')
+
+    optparse.add_option('--push', action='callback', callback=append,
+                        callback_args=(ACTION_PUSH,),
+                        help='push buffer onto stack')
+    optparse.add_option('--pop', action='callback', callback=append,
+                        callback_args=(ACTION_POP,),
+                        help='pop buffer from stack')
+
     # dynamically add args/options for the filters
-    filters = Insub.filter.setup(optparse)
+    filters = Insub.filter.setup(optparse, filters)
     opts, args = optparse.parse_args()
 
     # render output
