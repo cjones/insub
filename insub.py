@@ -29,32 +29,19 @@
 """Suite of text filters to annoy people on IRC"""
 
 from __future__ import with_statement
-from subprocess import Popen, PIPE, STDOUT
 from collections import defaultdict
 from optparse import OptionParser
+from pty import fork as ptyfork
+from select import select
 import textwrap
-import shlex
 import random
-import codecs
+import shlex
+import errno
 import math
 import sys
 import os
 import re
 
-# possibly POSIX-only stuff
-try:
-    import pty
-    from select import select
-    import errno
-except ImportError:
-    pass
-
-
-#################
-### CONSTANTS ###
-#################
-
-# metadeta
 __version__ = '0.1'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
@@ -62,45 +49,42 @@ __all__ = ['Insub']
 # defaults
 INPUT_ENCODING = 'utf-8'
 OUTPUT_ENCODING = 'utf-8'
-ORDERED = True
-SPOOKWORDS = 5
-SINE_HEIGHT = 5
-SINE_FREQ = 0.3
-SINE_BG = ' '
-MATRIX_SIZE = 6
-MATRIX_SPACING = 2
-HUG_SIZE = 5
-HUG_CHARS = '{', '}'
-OUTLINE_STYLE = 'box'
-BANNER_WIDTH = 50
-BANNER_FG = '#'
-BANNER_BG = ' '
-COW_FILE = 'default'
-COW_TONGUE = '  '
-COW_EYES = 'oo'
-COW_STYLE = 'say'
-FIGLET_FONT = 'standard'
-FIGLET_DIR = 'auto'
-FIGLET_JUSTIFY = 'auto'
-FIGLET_FLIP = False
-FIGLET_REV = False
-PTY_EXEC = False
-PTY_TIMEOUT = None
-BRUSHTYPE='rainbow'
-BRUSHSKEW = 1
-BRUSHOFFSET = 0
-FORCEPAINT = False
 SCHEME = 'ansi'
-
-# option choices
-FIGLET_DIRS = ('auto', 'left-to-right', 'right-to-left')
-COW_STYLES = ('say', 'think')
-JUSTIFY_OPTS = ('auto', 'left', 'right')
-
-# callback for optparse to toggle true/false setter
-toggle = lambda x: ('store_%s' % (not x)).lower()
+DEFAULTS = {'figlet_dir': None,
+            'cow_dir': None,
+            'execute_pty': False,
+            'execute_timeout': None,
+            'spook_words': 5,
+            'sine_bg': ' ',
+            'sine_freq': 0.3,
+            'sine_height': 5,
+            'matrix_size': 6,
+            'matrix_spacing': 2,
+            'figlet_font': 'standard',
+            'figlet_direction': 'auto',
+            'figlet_justify': 'auto',
+            'figlet_reverse': False,
+            'figlet_flip': False,
+            'banner_width': 50,
+            'banner_fg': '#',
+            'banner_bg': ' ',
+            'hug_size': 5,
+            'hug_arms': '{}',
+            'cow_file': 'default',
+            'cow_style': 'say',
+            'cow_eyes': 'oo',
+            'cow_tongue': '  ',
+            'outline_style': 'box',
+            'prefix_string': '',
+            'postfix_string': '',
+            'paint_brush': 'rainbow',
+            'paint_offset': 0,
+            'paint_skew': 1,
+            'wrap_width': 72,
+            }
 
 # try to find location of figlet and cowsay files
+
 def find_share(name):
     """Find share directories of the provided name"""
     for prefix in ('/opt/local', '/usr/local', '/usr', '/'):
@@ -109,8 +93,11 @@ def find_share(name):
             if os.path.isdir(path):
                 return path
 
-FIGLET_PATH = find_share('figlet')
-COW_PATH = find_share('cows')
+if not DEFAULTS['figlet_dir']:
+    DEFAULTS['figlet_dir'] = find_share('figlet')
+
+if not DEFAULTS['cow_dir']:
+    DEFAULTS['cow_dir'] = find_share('cows')
 
 # precompiled regex
 newline_re = re.compile(r'\r?\n')
@@ -1195,16 +1182,10 @@ STANDARD_FONT = (
         " @@\n")
 
 
-###############################
-### FIGLET RENDERING ENGINE ###
-###############################
-
 class FigletFont(object):
 
-    """
-    This class represents the currently loaded figlet font, including
-    meta-data about how it should be displayed
-    """
+    """This class represents the currently loaded figlet font, including
+    meta-data about how it should be displayed"""
 
     magic_number_re = re.compile(r'^flf2.')
     end_marker_re = re.compile(r'(.)\s*$')
@@ -1291,10 +1272,8 @@ class FigletFont(object):
 
 class FigletRenderingEngine(object):
 
-    """
-    This class handles the rendering of a FigletFont,
-    including smushing/kerning/justification/direction
-    """
+    """This class handles the rendering of a FigletFont, including
+    smushing/kerning/justification/direction"""
 
     SM_EQUAL = 1       # smush equal chars (not hardblanks)
     SM_LOWLINE = 2     # smush _ with any char in hierarchy
@@ -1527,10 +1506,6 @@ class Figlet(object):
         return self.engine.render(text)
 
 
-#####################
-### COLOR SUPPORT ###
-#####################
-
 def coerce(func):
 
     """Internal: decorator to coerce all args and keyword args that are
@@ -1579,12 +1554,13 @@ class colstr(object):
     """colstr([string [, encoding[, scheme[, errors[, newline]]]]]) -> object
 
     Create a new color-mapped Unicode object from the given string.
-    encoding defaults to the current default string encoding.
-    scheme can be 'ansi', 'mirc' or 'plain' and defaults to auto-detect.
-    errors can be 'strict', 'replace' or 'ignore' and defaults to 'strict'.
-    newline style can be 'reset' or 'ignore' and indicate whether color
-    gets reset to its default on a new line (such as IRC) or if the color
-    it was changed to continues (some shells).  default is 'reset'.
+    encoding defaults to the current default string encoding.  scheme
+    can be 'ansi', 'mirc' or 'plain' and defaults to auto-detect.
+    errors can be 'strict', 'replace' or 'ignore' and defaults to
+    'strict'.  newline style can be 'reset' or 'ignore' and indicate
+    whether color gets reset to its default on a new line (such as IRC)
+    or if the color it was changed to continues (some shells).  default
+    is 'reset'.
 
     The colstr object can be manipulated like regular unicode objects
     while keeping the underlyingn color information in tact.  Call the
@@ -1703,10 +1679,6 @@ class colstr(object):
             raise ValueError('plain/colmap size mismatch')
         return new
 
-    ##################
-    ### PROPERTIES ###
-    ##################
-
     @property
     def reset_char(self):
         """Packed reset character"""
@@ -1720,10 +1692,6 @@ class colstr(object):
         # default flag is set, this one is given special significance
         # for apps because it packs to \xFF.
         return self.pack(7, 1, 7, 1)
-
-    #####################
-    ### CLASS METHODS ###
-    #####################
 
     @classmethod
     def detect(cls, string):
@@ -1873,10 +1841,6 @@ class colstr(object):
         """Returns new colstr with color filled with bg"""
         return S.clone(None, bg * len(S))
 
-    #########################################################
-    ### UTILITY CLASS METHODS NOT USED BY THE COLSTR TYPE ###
-    #########################################################
-
     @classmethod
     def compile(cls, map):
         """Compile a letter-coded map into packed version"""
@@ -1937,10 +1901,6 @@ class colstr(object):
         char = cls.pack(fg, intense, bg, default)
         return char
 
-    ##########################
-    ### INTERNAL FUNCTIONS ###
-    ##########################
-
     def __str__(self):
         """x.__str__() <==> str(x)"""
         return self.plain
@@ -1952,10 +1912,6 @@ class colstr(object):
     def __iter__(self):
         for i in xrange(len(self)):
             yield self[i]
-
-    #################################
-    ### OVERLOAD GLOBAL OPERATORS ###
-    #################################
 
     def __mul__(x, n):
         """x.__mul__(n) <==> x*n"""
@@ -1979,10 +1935,6 @@ class colstr(object):
     def __add__(x, y):
         """x.__add__(y) <==> x+y"""
         return x.clone(x.plain + y.plain, x.colmap + y.colmap)
-
-    ################################
-    ### CAPITALIZATION FUNCTIONS ###
-    ################################
 
     def capitalize(S):
         """S.capitalize() -> colstr
@@ -2016,10 +1968,6 @@ class colstr(object):
         Return a titlecased version of S, i.e. words start with title case
         characters, all remaining cased characters have lower case."""
         return S.clone(S.plain.title())
-
-    ####################
-    ### RETURN BOOLS ###
-    ####################
 
     def isalnum(S):
         """S.isalnum() -> bool
@@ -2141,10 +2089,6 @@ class colstr(object):
         """x.__ne__(y) <==> x!=y"""
         return x.plain != y.plain
 
-    ################
-    ### INDEXING ###
-    ################
-
     @coerce
     def count(S, sub, *args):
         """S.count(sub[, start[, end]]) -> int
@@ -2189,10 +2133,6 @@ class colstr(object):
 
         Like S.rfind() but raise ValueError when the substring is not found."""
         return S.plain.rindex(sub.plain, *args)
-
-    #################
-    ### SPLITTING ###
-    #################
 
     @coerce
     def partition(S, sep):
@@ -2349,10 +2289,6 @@ class colstr(object):
         return S.clone(S.plain.join(item.plain for item in sequence),
                        S.colmap.join(item.colmap for item in sequence))
 
-    #############################
-    ### MANIPULATE WHITESPACE ###
-    #############################
-
     @coerce
     def strip(S, chars=None):
         """S.strip([chars]) -> colstr
@@ -2407,10 +2343,6 @@ class colstr(object):
             out.append(ch)
         return S.clone(u'').join(out)
 
-    #####################
-    ### JUSTIFICATION ###
-    #####################
-
     @coerce
     def center(S, width, fillchar=None):
         """S.center(width[, fillchar]) -> colstr
@@ -2444,16 +2376,6 @@ class colstr(object):
         if fillchar is None:
             fillchar = S.clone(u' ', S.reset_char)
         return fillchar * (width - len(S)) + S
-
-    ######################
-    ### TRANSFORMATION ###
-    ######################
-
-    # TODO: all of these functions should have a keepcolor flag that
-    # defines what color the transformed bit should have (inherited from
-    # the new piece or the part it's replacing).  This could be made an
-    # attribute of the colstr() as a default behavior so that we can
-    # avoid adding more non-str/unicode items to the interface.
 
     def reverse(S):
         """S.reverse(S) -> colstr"""
@@ -2587,186 +2509,369 @@ BRUSH_MAP = dict((name, colstr.compile(map))
                  for name, map in BRUSH_MAP.iteritems())
 
 
-#########################
-### THE ACTUAL SCRIPT ###
-#########################
+class CowScriptError(Exception):
+
+    """Base CowScript exception class"""
+
+    def __init__(self, msg=''):
+        super(CowScriptError, self).__init__()
+        self.msg = msg
+
+    def __str__(self):
+        return str(self.msg)
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+
+class ParseError(CowScriptError):
+
+    """An error encountered parsing cowscript"""
+
+    def __init__(self, msg='', ch='', pos=0, state=None):
+        super(ParseError, self).__init__(msg)
+        self.ch = ch
+        self.pos = pos
+        self.state = state
+
+    def __str__(self):
+        return '%s on %r at %d: %s [%s]' % (
+                self.name, self.ch, self.pos, self.msg, self.state)
+
+
+class TokenizeError(ParseError):
+
+    """Exception class for token parsing errors"""
+
+
+class CowScript(object):
+
+    """Small language parser for Insub ASCII art filter suite
+
+    Example of a complex expression:
+
+        $(cow_dir=/usr/local/share/cows)
+        $(figlet_dir=/usr/local/share/figlet)
+        [
+            ["hi" | paint | figlet | mirror]
+            +["there" | paint(usa) | banner(25,fg=#,bg=.) | rotate | mirror]
+            ["friend" | figlet(crawford) | paint | box]
+        ] | cow(moose) | paint(canada)"""
+
+    # tokens
+    TOKEN_SETTING = 'SET'
+    TOKEN_PUSH = 'PUSH'
+    TOKEN_POP = 'POP'
+    TOKEN_DATA = 'DATA'
+    TOKEN_FILTER = 'FILTER'
+    TOKEN_ARGS = 'ARGS'
+    TOKEN_POP_APPEND = 'APPEND'
+    TOKEN_POP_NEWLINE = 'NEWLINE'
+
+    # states
+    STATE_NONE = 'No state'
+    STATE_SET_WAIT = 'Waiting for global set block'
+    STATE_SET_READING = 'Reading global setting'
+    STATE_DATA_READING = 'Reading text data'
+    STATE_FILTER_WAIT = 'Waiting for filter name'
+    STATE_FILTERNAME_READING = 'Reading filter name'
+    STATE_NESTED_WAIT = 'Waiting for nest block after append'
+    STATE_ARGS_READING = 'Reading filter args'
+
+    # character classes
+    CHARS_WHITESPACE = (' ', '\t', '\r', '\n')
+    CHARS_FILTERNAME = [chr(o) for o in (range(97, 123) + range(65, 91) +
+                                         range(48, 58) + range(95, 96))]
+
+    # strings
+    STR_SET_START = '$'
+    STR_SET_BLOCK_START = '('
+    STR_SET_BLOCK_END = ')'
+    STR_ESCAPE = '\\'
+    STR_NEST_START = '['
+    STR_NEST_END = ']'
+    STR_DATA_START = '"'
+    STR_DATA_END = '"'
+    STR_PIPE = '|'
+    STR_APPEND = '+'
+    STR_ARGS_START = '('
+    STR_ARGS_END = ')'
+
+    def __init__(self, cmd):
+        super(CowScript, self).__init__()
+        self.tokens = self.tokenize(cmd)
+
+    @classmethod
+    def tokenize(cls, string):
+        """Tokenize a command expression"""
+
+        pos = 0
+        state = cls.STATE_NONE
+        store = None
+        readto = None
+        buf = []
+        level = 0
+        append = set()
+        tokens = []
+
+        def unexpected(ch):
+            raise TokenizeError('unexpected char', ch, pos, state)
+
+        while True:
+            if pos >= len(string):
+                if readto is not None:
+                    ch = readto
+                else:
+                    break
+            else:
+                ch = string[pos]
+
+            if readto:
+                if readto is not None:
+                    callback = hasattr(readto, '__call__')
+                    if callback:
+                        done = readto(ch)
+                    else:
+                        done = (ch == readto and
+                                string[pos - 1] != cls.STR_ESCAPE)
+
+                if done:
+                    data = ''.join(buf)
+                    if state == cls.STATE_SET_READING:
+                        tokens.append((cls.TOKEN_SETTING, data))
+                    elif state == cls.STATE_DATA_READING:
+                        tokens.append((cls.TOKEN_DATA, data))
+                    elif state == cls.STATE_FILTERNAME_READING:
+                        tokens.append((cls.TOKEN_FILTER, data))
+                    elif state == cls.STATE_ARGS_READING:
+                        tokens.insert(-1, (cls.TOKEN_ARGS, data))
+
+                    readto = None
+                    buf = []
+                    state = cls.STATE_NONE
+
+                    if callback:
+                        continue
+
+                else:
+                    buf.append(ch)
+
+            elif state == cls.STATE_NONE:
+                if ch in cls.CHARS_WHITESPACE:
+                    pass
+                elif ch == cls.STR_SET_START:
+                    state = cls.STATE_SET_WAIT
+                elif ch == cls.STR_NEST_START:
+                    level += 1
+                    tokens.append((cls.TOKEN_PUSH, ''))
+                elif ch == cls.STR_NEST_END:
+                    if level in append:
+                        val = cls.TOKEN_POP_APPEND
+                        append.remove(level)
+                    else:
+                        val = cls.TOKEN_POP_NEWLINE
+                    tokens.append((cls.TOKEN_POP, val))
+                    level -= 1
+                elif ch == cls.STR_DATA_START:
+                    state = cls.STATE_DATA_READING
+                    readto = cls.STR_DATA_END
+                elif ch == cls.STR_PIPE:
+                    state = cls.STATE_FILTER_WAIT
+                elif ch == cls.STR_APPEND:
+                    append.add(level + 1)
+                    state = cls.STATE_NESTED_WAIT
+                elif ch == cls.STR_ARGS_START:
+                    state = cls.STATE_ARGS_READING
+                    readto = cls.STR_ARGS_END
+                else:
+                    unexpected(ch)
+
+            elif state == cls.STATE_SET_WAIT:
+                if ch == cls.STR_SET_BLOCK_START:
+                    state = cls.STATE_SET_READING
+                    readto = cls.STR_SET_BLOCK_END
+                elif ch in cls.CHARS_WHITESPACE:
+                    pass
+                else:
+                    unexpected(ch)
+
+            elif state == cls.STATE_FILTER_WAIT:
+                if ch in cls.CHARS_WHITESPACE:
+                    pass
+                elif ch in cls.CHARS_FILTERNAME:
+                    state = cls.STATE_FILTERNAME_READING
+                    readto = lambda ch: ch not in cls.CHARS_FILTERNAME
+                    continue
+                else:
+                    raise TokenizeError('invalid filter char', ch, pos, state)
+
+            elif state == cls.STATE_NESTED_WAIT:
+                if ch in cls.CHARS_WHITESPACE:
+                    pass
+                elif ch == cls.STR_NEST_START:
+                    state = cls.STATE_NONE
+                    continue
+                else:
+                    raise TokenizeError(
+                            'appending to non-nested block', ch, pos, state)
+
+            pos += 1
+
+        if level:
+            raise TokenizeError('missing end of nested block', ch, pos, state)
+        if state != cls.STATE_NONE:
+            raise TokenizeError('invalid end state', ch, pos, state)
+
+        return tokens
+
+
+class filter(object):
+
+    def __init__(self, *types):
+        self.types = types
+
+    def __call__(self, func):
+        code = func.func_code
+        keys = code.co_varnames[2:code.co_argcount]
+
+        def inner(obj, lines, *args, **kwargs):
+            args = list(args)
+            for key in keys[len(args):]:
+                if key in kwargs:
+                    val = kwargs[key]
+                else:
+                    val = getattr(obj, '%s_%s' % (func.__name__, key))
+                args.append(val)
+            fixed = []
+            for arg, argtype in zip(args, self.types):
+                if arg is not None and type(arg) is not argtype:
+                    if argtype is bool:
+                        arg = arg.lower() not in ('0', 'no', 'false', 'off')
+                    else:
+                        arg = argtype(arg)
+                fixed.append(arg)
+            return func(obj, lines, *fixed)
+
+        return inner
+
 
 class Insub(object):
 
     """Suite of text filters to annoy people on IRC"""
 
-    def __init__(self, **opts):
-        self.__dict__.update(opts)
-        self.stack = []
+    def __init__(self, expr, **kwargs):
+        self.__dict__.update(DEFAULTS, **kwargs)
+        cow = CowScript(expr)
+        self.tokens = cow.tokens
 
-    def render(self, data, filters=None):
+    def render(self):
         """Render data using the provided filters"""
-        if isinstance(data, str):
-            data = data.decode(self.input_encoding, 'replace')
-        if filters is None:
-            filters = []
-        if not self.ordered:
-            filters = [func for func, opts in type(self).filter.filters
-                       if func in filters]
-
-        lines = colstr(data).splitlines()
-        for filter in filters:
-            if isinstance(filter, basestring):
-                if isinstance(filter, str):
-                    filter = filter.decode(self.input_encoding, 'replace')
-                    filter = colstr(filter)
-                lines = list(lines)
-                lines.append(filter)
-            elif filter is ACTION_PUSH:
-                self.stack.append(lines)
+        stack = []
+        lines = []
+        args = None
+        for token, val in self.tokens:
+            if token == CowScript.TOKEN_PUSH:
+                stack.append(lines)
                 lines = []
-            elif filter is ACTION_POP:
-                lines = list(lines) + list(self.stack.pop())
-            else:
-                lines = filter(self, lines)
+            elif token == CowScript.TOKEN_SETTING:
+                key, val = val.split('=', 1)
+                setattr(self, key, val)
+            elif token == CowScript.TOKEN_DATA:
+                lines.append(colstr(val))
+            elif token == CowScript.TOKEN_FILTER:
+                filter = getattr(self, val)
+                if args:
+                    kwargs = {}
+                    new = []
+                    for arg in re.split(r'\s*,\s*', args):
+                        if '=' in arg:
+                            k, v = arg.split('=', 1)
+                            kwargs[str(k)] = v
+                        else:
+                            new.append(arg)
+                    args = tuple(new)
+                else:
+                    args = ()
+                    kwargs = {}
+                lines = list(filter(lines, *args, **kwargs))
+                args = None
 
-        data = colstr('\n').join(lines).render(self.scheme)
-        return data.encode(self.output_encoding, 'replace')
+            elif token == CowScript.TOKEN_POP:
+                # XXX if val is APPEND we need something fancier
+                lines += stack.pop(0)
+            elif token == CowScript.TOKEN_ARGS:
+                args = val
 
-    class filter(object):
-
-        """Decorator to glue filters to optparse and preserv order"""
-
-        filters = []
-
-        def __init__(self, **options):
-            self.options = options
-
-        def __call__(self, func):
-            type(self).filters.append((func, self.options))
-            return func
-
-        @classmethod
-        def setup(cls, optparse, filters=None):
-            """Construct options for optparse"""
-            if filters is None:
-                filters = []
-            group = optparse.add_option_group('Filters')
-
-            def add_filter(option, key, val, optparse, func):
-                if val is not None:
-                    setattr(optparse.values, option.dest, val)
-                filters.append(func)
-
-            for func, options in cls.filters:
-                filter_kwargs = dict(action='callback',
-                                     callback=add_filter,
-                                     callback_args=(func,),
-                                     help=func.__doc__)
-                extra_options = []
-                for option, kwargs in options.iteritems():
-                    if isinstance(kwargs, dict):
-                        extra_options.append(('--' + option, kwargs))
-                    else:
-                        filter_kwargs[option] = kwargs
-                group.add_option('--' + func.__name__, **filter_kwargs)
-                for opt, kwargs in extra_options:
-                    group.add_option(opt, **kwargs)
-
-            return filters
-
-
-    ####################################
-    ### FILTERS THAT ADD SOURCE TEXT ###
-    ####################################
-
+        for line in lines:
+            yield line
 
     @filter()
     def ver(self, lines):
         """Display our version"""
+        for line in lines:
+            yield line
         yield colstr('%s %s' % (self.name, __version__))
-        for line in lines:
-            yield line
 
-    @filter()
-    def stdin(self, lines):
-        """Add input from STDIN to data to process"""
-        for line in sys.stdin:
-            yield colstr(line.rstrip().decode(self.input_encoding, 'replace'))
-        for line in lines:
-            yield line
-
-    @filter(ptyexec=dict(default=PTY_EXEC, action='store_true',
-                         help='exec() runs in a pty'),
-            ptytimeout=dict(metavar='<secs>', default=PTY_TIMEOUT,
-                            type='float', help='timeout for pty exec()'))
-    def execute(self, lines):
+    @filter(str, bool, float)
+    def execute(self, lines, cmd, pty, timeout):
         """Execute args and add data to the output"""
         for line in lines:
-            line = line.plain.encode(self.output_encoding, 'replace')
-            cmd = shlex.split(line)
+            yield line
 
-            # fake a pty for stuff that likes to buffer output.. this
-            # is not guaranteed to work cross-platform, so if it doesn't,
-            # don't use it..
-            if self.ptyexec:
-                pid, fd = pty.fork()
-                if pid == pty.CHILD:
-                    os.execvp(cmd[0], cmd)
-                    sys.exit(1)
-                rbuf = []
-                while True:
-                    data = None
-                    if fd in select([fd], [], [], self.ptytimeout)[0]:
-                        try:
-                            data = os.read(fd, 1024)
-                        except OSError, error:
-                            if error.errno != errno.EIO:
-                                raise
-                    if not data:
-                        data = ''.join(rbuf)
-                        yield colstr(data.decode(self.input_encoding,
-                                                 'replace'))
-                        break
-                    rbuf.append(data)
-                    if '\n' in data:
-                        data = ''.join(rbuf)
-                        lines = newline_re.split(data)
-                        rbuf = [lines.pop()]
-                        for line in lines:
-                            yield colstr(line.decode(self.input_encoding,
-                                                     'replace'))
+        args = shlex.split(cmd)
+        if pty:
+            pid, fd = ptyfork()
+        else:
+            fd, writer = os.pipe()
+            pid = os.fork()
+            if not pid:
                 os.close(fd)
-                os.waitpid(pid, 0)
-            else:
-                # the more cross-platform way of doing this
-                process = Popen(cmd, stdout=PIPE, stderr=STDOUT)
-                for line in process.stdout:
-                    yield colstr(line.rstrip().decode(self.input_encoding,
-                                                      'replace'))
+                os.dup2(writer, sys.stdout.fileno())
+                os.dup2(writer, sys.stderr.fileno())
+            os.close(writer)
 
-    @filter()
-    def slurp(self, lines):
+        if not pid:
+            os.execvp(args[0], args)
+            sys.exit(1)
+
+        buf = []
+        while True:
+            data = None
+            if fd in select([fd], [], [], timeout)[0]:
+                try:
+                    data = os.read(fd, 1024)
+                except OSError, error:
+                    if error.errno != errno.EIO:
+                        raise
+            if not data:
+                yield colstr(''.join(buf).decode(self.input_encoding))
+                break
+            buf.append(data)
+            if '\n' in data:
+                lines = ''.join(buf).splitlines()
+                buf = [lines.pop()]
+                for line in lines:
+                    yield colstr(line.decode(self.input_encoding))
+
+        os.close(fd)
+        os.waitpid(pid, 0)
+
+    @filter(str)
+    def read(self, lines, path):
         """Read from files and add data to output"""
         for line in lines:
-            with open(line.plain, 'r') as fp:
-                for line in fp:
-                    yield colstr(line.rstrip().decode(self.input_encoding,
-                                                      'replace'))
+            yield line
+        with open(path, 'r') as fp:
+            for line in fp:
+                yield colstr(line.rstrip().decode(self.input_encoding))
 
-    @filter(spookwords=dict(metavar='<#>', default=SPOOKWORDS, type='int',
-                            help='Spook words to use (default: %default)'))
-    def spook(self, lines):
+    @filter(int)
+    def spook(self, lines, words):
         """Get NSA's attention"""
-        lines = list(lines)
-        if not lines:
-            yield colstr(self._get_spook())
-        else:
-            for line in lines:
-                yield colstr(u' ').join([self._get_spook(), line])
-
-    def _get_spook(self):
-        return u' '.join(random.sample(SPOOK_PHRASES, self.spookwords))
-
-
-    #########################################
-    ### FILTERS THAT CHANGE TEXT CONTENTS ###
-    #########################################
+        for line in lines:
+            yield line
+        yield colstr(' ').join(random.sample(SPOOK_PHRASES, words))
 
 
     @filter()
@@ -2798,7 +2903,7 @@ class Insub(object):
         for line in lines:
             new = []
             for word in line.split():
-                if len(word) > 4:
+                if len(word) > 3:
                     word = list(word)
                     first = word.pop(0)
                     last = word.pop()
@@ -2839,7 +2944,6 @@ class Insub(object):
     @filter()
     def mirror(self, lines):
         """Mirror image text"""
-        lines = list(lines)
         size = max(len(line) for line in lines)
         for line in lines:
             yield line.translate(MIRROR_MAP).reverse().rjust(size)
@@ -2850,43 +2954,31 @@ class Insub(object):
         for line in lines:
             yield line.translate(JIGS_MAP)
 
-
-    ##############################
-    ### CHANGE TEXT APPEARANCE ###
-    ##############################
-
-
-    @filter(sine_height=dict(metavar='<int>', default=SINE_HEIGHT, type='int',
-                             help='Height of wave (default: %default)'),
-            sine_freq=dict(metavar='<float>', default=SINE_FREQ, type='float',
-                           help='Wave frequency (default: %default)'),
-            sine_bg=dict(metavar='<str>', default=SINE_BG,
-                                 help='Sine background (default: %s)' %
-                                 repr(SINE_BG)))
-    def sine(self, lines):
+    @filter(float, int, unicode)
+    def sine(self, lines, freq, height, bg):
         """Arrange text in a sine wave pattern"""
         out = defaultdict(colstr)
         line_num = 0
         for line in lines:
-            width = len(line) * self.sine_freq
+            width = len(line) * freq
             plot = {}
             x = 0
             for ch in line:
-                y = int(self.sine_height * math.sin(x)) + self.sine_height
+                y = int(height * math.sin(x)) + height
                 plot.setdefault('%.2f' % x, {})[y] = ch
-                x += self.sine_freq
-            for y in xrange(self.sine_height * 2 + 1):
+                x += freq
+            for y in xrange(height * 2 + 1):
                 x = 0
                 while x <= width:
                     xrep = '%.2f' % x
                     if xrep in plot and y in plot[xrep]:
                         out[line_num] += plot[xrep][y]
                     else:
-                        out[line_num] += self.sine_bg
-                    x += self.sine_freq
+                        out[line_num] += bg
+                    x += freq
                 line_num += 1
         lines = [item[1] for item in sorted(out.iteritems())]
-        empty = self.sine_bg * max(len(line) for line in lines)
+        empty = bg * max(len(line) for line in lines)
         for line in lines:
             if line != empty:
                 yield line
@@ -2907,62 +2999,34 @@ class Insub(object):
                 yield colstr(' ') * spacer + word
                 spacer += len(word)
 
-    @filter(matrix_size=dict(metavar='<int>', default=MATRIX_SIZE, type='int',
-                             help='Matrix size (default: %default)'),
-            matrix_spacing=dict(metavar='<int>', default=MATRIX_SPACING,
-                                type='int',
-                                help='Matrix spacing (default: %default)'))
-    def matrix(self, lines):
+    @filter(int, int)
+    def matrix(self, lines, size, spacing):
         """Arrange text in a matrix"""
         data = colstr(' ').join(lines)
         out = defaultdict(colstr)
-        for i in xrange(0, len(data), self.matrix_size):
-            chunk = data[i:i + self.matrix_size]
+        for i in xrange(0, len(data), size):
+            chunk = data[i:i + size]
             for j in xrange(len(chunk)):
-                out[j] += chunk[j] + colstr(' ') * self.matrix_spacing
+                out[j] += chunk[j] + colstr(' ') * spacing
         for i, line in sorted(out.iteritems()):
             yield line
 
-    @filter(figlet_path=dict(metavar='<dir>', default=FIGLET_PATH,
-                             help='Location of figfonts (default: %default)'),
-            figlet_font=dict(metavar='<font>', default=FIGLET_FONT,
-                             help='Default font (default: %default)'),
-            figlet_direction=dict(metavar='<%s>' % '|'.join(FIGLET_DIRS),
-                                  default=FIGLET_DIR, type='choice',
-                                  choices=FIGLET_DIRS,
-                                  help='Figlet directions (default: %default)'),
-            figlet_justify=dict(metavar='<%s>' % '|'.join(JUSTIFY_OPTS),
-                                default=FIGLET_JUSTIFY, type='choice',
-                                choices=JUSTIFY_OPTS,
-                                help='Justify type (default: %default)'),
-            figlet_reverse=dict(default=FIGLET_REV, action=toggle(FIGLET_REV),
-                                help='Mirror image font (default: %default)'),
-            figlet_flip=dict(default=FIGLET_FLIP, action=toggle(FIGLET_FLIP),
-                             help='Flip font (default: %default)'))
-    def figlet(self, lines):
-        figlet = Figlet(prefix=self.figlet_path,
-                        font=self.figlet_font,
-                        direction=self.figlet_direction,
-                        justify=self.figlet_justify)
+    @filter(str, str, str, str, bool, bool)
+    def figlet(self, lines, font, dir, direction, justify, reverse, flip):
+        figlet = Figlet(prefix=dir, font=font, direction=direction,
+                        justify=justify)
         lines = figlet.render(colstr(' ').join(lines))
-        if self.figlet_reverse:
+        if reverse:
             lines = [line.translate(FIG_REV_MAP).reverse() for line in lines]
-        if self.figlet_flip:
+        if flip:
             lines = [line.translate(FIG_FLIP_MAP) for line in reversed(lines)]
         return lines
 
-    @filter(banner_width=dict(metavar='<int>', default=BANNER_WIDTH, type='int',
-                              help='Font width (default: %default)'),
-            banner_fg=dict(metavar='<char>', default=BANNER_FG,
-                           help='Banner foreground (default: %s)' %
-                           repr(BANNER_FG)),
-            banner_bg=dict(metavar='<char>', default=BANNER_BG,
-                           help='Banner background (default: %s)' %
-                           repr(BANNER_BG)))
-    def banner(self, lines):
+    @filter(int, str, str)
+    def banner(self, lines, width, fg, bg):
         """Convert text to banner text"""
         output = []
-        newline = colstr(self.banner_bg) * 132
+        newline = colstr(bg) * 132
         for ch in colstr(' ').join(lines):
             if ch.plain in BANNER_RULES:
                 line = list(newline)
@@ -2975,11 +3039,11 @@ class Insub(object):
                         i += 1
                     else:
                         n = BANNER_RULES[ch.plain][i + 1]
-                        line[x:x + n] = ch.clone(self.banner_fg) * n
+                        line[x:x + n] = ch.clone(fg) * n
                         i += 2
 
         # scale font to width
-        scale = int(132 / self.banner_width)
+        scale = int(132 / width)
         for i, line in enumerate(output):
             if not i % scale:
                 scaled = []
@@ -2988,16 +3052,12 @@ class Insub(object):
                         scaled.append(ch)
                 yield colstr().join(scaled)
 
-    @filter(hug_size=dict(metavar='<int>', default=HUG_SIZE, type='int',
-                          help='How many hugs (default: %default)'),
-            hug_chars=dict(metavar='<left> <right>', default=HUG_CHARS, nargs=2,
-                           help='Hugs chars (default: %s)' % repr(HUG_CHARS)))
-    def hug(self, lines):
+    @filter(int, str)
+    def hug(self, lines, size, arms):
         """Add hugs around the text"""
-        lines = list(lines)
         size = max(len(line) for line in lines)
-        left = colstr(self.hug_chars[0]) * self.hug_size
-        right = colstr(self.hug_chars[1]) * self.hug_size
+        left = colstr(arms[0]) * size
+        right = colstr(arms[1]) * size
         for line in lines:
             yield colstr('%s %s %s') % (left, line.center(size), right)
 
@@ -3007,7 +3067,6 @@ class Insub(object):
         # XXX this can't possibly be rotating 90 degrees because two
         # invocations put it back to normal.. but it's not 180 either.. so
         # yeah, something isn't really working here is it.
-        lines = list(lines)
         size = max(len(line) for line in lines)
         new = defaultdict(colstr)
         for line in reversed(lines):
@@ -3017,8 +3076,8 @@ class Insub(object):
         for i, line in sorted(new.iteritems(), key=lambda item: item[0]):
             yield line
 
-    @filter(dest='wrap_width', metavar='<width>', type='int')
-    def wrap(self, lines):
+    @filter(int)
+    def wrap(self, lines, width):
         """Wrap text"""
         raise NotImplementedError('needs colstr() implementation')
         for line in textwrap.wrap(' '.join(lines), width=self.wrap_width):
@@ -3038,38 +3097,16 @@ class Insub(object):
         for line in output.splitlines():
             yield line
 
-
-    ################################
-    ### CHANGE TEXT PRESENTATION ###
-    ################################
-
-
-    #@filter() def checker(self, lines): raise NotImplemented
-
-    @filter(cow_path=dict(metavar='<dir>', default=COW_PATH,
-                          help='Location of cow files (default: %default)'),
-            cow_file=dict(metavar='<cow>', default=COW_FILE,
-                          help='Default cow to use (%default)'),
-            cow_tongue=dict(metavar='<chars>', default=COW_TONGUE,
-                            help='Cow tongue (default: %s)' %
-                            repr(COW_TONGUE)),
-            cow_eyes = dict(metavar='<eyes>', default=COW_EYES,
-                            help='Cow eyees (default: %s)' %
-                            repr(COW_EYES)),
-            cow_style = dict(metavar='<%s>' % '|'.join(COW_STYLES),
-                             default=COW_STYLE, type='choice',
-                             choices=COW_STYLES,
-                             help='Cow thought bubble (default: %default)'))
-    def cow(self, lines):
+    @filter(str, str, str, str, str)
+    def cow(self, lines, file, dir, style, eyes, tongue):
         """Make a cow say it"""
 
         # look for the cow to use
         template = DEFAULT_COW
-        if self.cow_path:
-            cowfile = self.cow_file
-            if not cowfile.endswith('.cow'):
-                cowfile += '.cow'
-            path = os.path.join(self.cow_path, cowfile)
+        if dir:
+            if not file.endswith('.cow'):
+                file += '.cow'
+            path = os.path.join(dir, file)
             if os.path.basename(path) != 'default.cow' and os.path.exists(path):
                 with open(path, 'r') as fp:
                     template = fp.read()
@@ -3085,9 +3122,9 @@ class Insub(object):
         cow = u'\n'.join(cow)
 
         # perform substitions on cow
-        if self.cow_style == 'say':
+        if style == 'say':
             thoughts = '\\'
-        elif self.cow_style == 'think':
+        elif style == 'think':
             thoughts = 'o'
         cow = re.sub(r'\\(.)', r'\1', cow)
 
@@ -3096,15 +3133,15 @@ class Insub(object):
         cow = colstr(cow)
 
         cow = cow.replace('$thoughts', thoughts)
-        cow = cow.replace('$eyes', self.cow_eyes)
-        cow = cow.replace('$tongue', self.cow_tongue)
+        cow = cow.replace('$eyes', eyes)
+        cow = cow.replace('$tongue', tongue)
 
         # construct the thought bubble
         lines = list(lines)
         size = max(len(line) for line in lines)
         yield colstr(' %s ' % ('_' * (size + 2)))
         for i, line in enumerate(lines):
-            if self.cow_style == 'think':
+            if style == 'think':
                 left, right = '(', ')'
             elif len(lines) == 1:
                 left, right = '<', '>'
@@ -3129,25 +3166,22 @@ class Insub(object):
         for line in reversed(lines):
             yield line
 
-    @filter(outline_style=dict(metavar='<%s>' % '|'.join(OUTLINE_STYLES),
-                               default=OUTLINE_STYLE, type='choice',
-                               choices=OUTLINE_STYLES,
-                               help='Style to use (default: %default)'))
-    def outline(self, lines):
+    @filter(str)
+    def outline(self, lines, style):
         """Draw an outline around text"""
         lines = list(lines)
         size = max(len(line) for line in lines)
 
         # top part
-        if self.outline_style == 'arrow':
+        if style == 'arrow':
             yield colstr('\\' + 'v' * (size + 2) + '/')
             left, right = '>', '<'
             bottom = colstr('/' + '^' * (size + 2) + '\\')
-        elif self.outline_style == 'box':
+        elif style == 'box':
             yield colstr('+' + '-' * (size + 2) + '+')
             left = right = '|'
             bottom = colstr('+' + '-' * (size + 2) + '+')
-        elif self.outline_style == '3d':
+        elif style == '3d':
             yield colstr('  ' + '_' * (size + 3))
             yield colstr(' /' + ' ' * (size + 2) + '/|')
             yield colstr('+' + '-' * (size + 2) + '+ |')
@@ -3159,23 +3193,17 @@ class Insub(object):
                     left, line, ' ' * (size - len(line)), right)
         yield bottom
 
-
-    ###############################
-    ### POST-PROCESSING FILTERS ###
-    ###############################
-
-
-    @filter(dest='prefix_string', metavar='<text>', type='string')
-    def prefix(self, lines):
+    @filter(str)
+    def prefix(self, lines, string):
         """Prepend text to each line"""
         for line in lines:
-            yield colstr(self.prefix_string) + line
+            yield colstr(string) + line
 
-    @filter(dest='postfix_string', metavar='<text>', type='string')
-    def postfix(self, lines):
+    @filter(str)
+    def postfix(self, lines, string):
         """Append text to each line"""
         for line in lines:
-            yield line + self.postfix_string
+            yield line + string
 
     @filter()
     def strip(self, lines):
@@ -3193,98 +3221,52 @@ class Insub(object):
         for line in lines:
             yield line.clone(None, line.nocolor_char * len(line))
 
-    @filter(brush=dict(
-                dest='brushes', metavar='<%s>' % '|'.join(BRUSH_MAP),
-                action='append',
-                help='Change paint brush (default: %s)' % BRUSHTYPE),
-            brushskew=dict(
-                metavar='<#>', default=BRUSHSKEW, type='int',
-                help='Per-line brush skew (default: %default)'),
-            brushoffset=dict(
-                metavar='<#>', default=BRUSHOFFSET, type='int',
-                help='Brush offset point (default: %default)'),
-            forcepaint=dict(
-                default=FORCEPAINT, action=toggle(FORCEPAINT),
-                help='Paint over already colored chars (default: %default)'))
-    def paint(self, lines):
+    @filter(str, int, int)
+    def paint(self, lines, brush, offset, skew):
         """Make stuff pretty!"""
-        offset = self.brushoffset
-        if self.brushes is None:
-            self.brushes = [BRUSHTYPE]
-        self.brushtype = self.brushes.pop()
-        map = BRUSH_MAP[self.brushtype]
+        map = BRUSH_MAP[brush]
         for line in lines:
             new = []
             for i, ch in enumerate(line):
                 if ch.colmap == ch.reset_char:
                     ch.colmap = map[(offset + i) % len(map)]
                 new.append(ch)
-            offset += self.brushskew
+            offset += skew
             yield colstr().join(new)
-        self.brushoffset = offset % 256
-
-    #@filter() def tree(self, lines): raise NotImplemented
-    #@filter() def blink(self, lines): raise NotImplemented
-
-    ######################
-    ### MISC FUNCTIONS ###
-    ######################
+        self.paint_offset = offset % 256
 
     @property
     def name(self):
         """Name of the script"""
         return os.path.basename(sys.argv[0])
 
-ACTION_PUSH = 1
-ACTION_POP = 2
+    def __iter__(self):
+        """Iterate over rendered data"""
+        for line in self.render():
+            yield line
+
 
 def main():
     """CLI-based interface"""
-
-    # parse commandline options
-    optparse = OptionParser(version=__version__, usage='%prog [opts] [text]')
-    optparse.add_option('-I', '--input-encoding', metavar='<encoding>',
+    optparse = OptionParser(version=__version__,
+                            usage='%prog <expression, ...>\n\n' +
+                                   CowScript.__doc__)
+    optparse.add_option('-i', dest='input_encoding', metavar='<encoding>',
                         default=INPUT_ENCODING,
-                        help='Input encoding (default: %default)')
-    optparse.add_option('-O', '--output-encoding', metavar='<encoding>',
+                        help='input encoding (%default)')
+    optparse.add_option('-o', dest='output_encoding', metavar='<encoding>',
                         default=OUTPUT_ENCODING,
-                        help='Output encoding (default: %default)')
-    optparse.add_option('-o', '--ordered', default=ORDERED,
-                        action=toggle(ORDERED),
-                        help='Automatically order filters')
-    optparse.add_option('-s', '--scheme',
-                        metavar='<%s>' % '|'.join(colstr.schemes),
-                        default=SCHEME, type='choice',
-                        choices=colstr.schemes.keys(),
-                        help='Color output scheme (default: %default)')
-
-    # append text mid-stream  XXX this doesn't fit in with filter() model
-    filters = []
-    def append(option, key, val, optparse, action):
-        if action is ACTION_PUSH:
-            val = ACTION_PUSH
-        elif action is ACTION_POP:
-            val = ACTION_POP
-        filters.append(val)
-
-    optparse.add_option('-a', '--append', metavar='<text>', action='callback',
-                        callback=append, type='string', callback_args=(None,),
-                        help='Insert text into stream')
-
-    optparse.add_option('--push', action='callback', callback=append,
-                        callback_args=(ACTION_PUSH,),
-                        help='push buffer onto stack')
-    optparse.add_option('--pop', action='callback', callback=append,
-                        callback_args=(ACTION_POP,),
-                        help='pop buffer from stack')
-
-    # dynamically add args/options for the filters
-    filters = Insub.filter.setup(optparse, filters)
+                        help='output encoding (%default)')
+    optparse.add_option('-s', dest='scheme', metavar='<scheme>',
+                        default=SCHEME, help='color scheme (%default)')
     opts, args = optparse.parse_args()
 
-    # render output
-    insub = Insub(**opts.__dict__)
-    print insub.render(' '.join(args), filters)
+    expr = sys.stdin.read().decode(opts.input_encoding)
+    lines = Insub(expr, **opts.__dict__)
+    data = colstr('\n').join(lines)
+    data = data.render(opts.scheme)
+    data = data.encode(opts.output_encoding)
+    print data
 
     return 0
 
