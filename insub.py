@@ -2551,13 +2551,13 @@ class CowScript(object):
 
     Example of a complex expression:
 
-        $(cow_dir=/usr/local/share/cows)
+        $(cow_dir=/home/cjones/.irssi/cows)
         $(figlet_dir=/usr/local/share/figlet)
         [
             ["hi" | paint | figlet | mirror]
             +["there" | paint(usa) | banner(25,fg=#,bg=.) | rotate | mirror]
-            ["friend" | figlet(crawford) | paint | box]
-        ] | cow(moose) | paint(canada)"""
+            ["friend" | figlet(crawford) | paint | outline(box)]
+        ] | cow(wtf) | paint(canada)"""
 
     # tokens
     TOKEN_SETTING = 'SET'
@@ -2728,12 +2728,17 @@ class CowScript(object):
 
 class filter(object):
 
+    """Decorator for registering a function as a filter"""
+
+    filters = []
+
     def __init__(self, *types):
         self.types = types
 
     def __call__(self, func):
         code = func.func_code
         keys = code.co_varnames[2:code.co_argcount]
+        self.__class__.filters.append((func, keys))
 
         def inner(obj, lines, *args, **kwargs):
             args = list(args)
@@ -2754,6 +2759,16 @@ class filter(object):
             return func(obj, lines, *fixed)
 
         return inner
+
+    def __get__(self, obj, cls):
+        """Descriptor method to generate help"""
+        return '%%prog [options] [expr]\n\n%s\n\nFilters:\n\n%s' % (
+                CowScript.__doc__,
+                '\n'.join('%s%s - %s' % (
+                              func.__name__,
+                              '(%s)' % ', '.join(args) if args else '',
+                              func.__doc__)
+                          for func, args in self.__class__.filters))
 
 
 class Insub(object):
@@ -2807,7 +2822,7 @@ class Insub(object):
             yield line
 
     @filter()
-    def ver(self, lines):
+    def version(self, lines):
         """Display our version"""
         for line in lines:
             yield line
@@ -2815,7 +2830,7 @@ class Insub(object):
 
     @filter(str, bool, float)
     def execute(self, lines, cmd, pty, timeout):
-        """Execute args and add data to the output"""
+        """Execute cmd and add data to the output"""
         for line in lines:
             yield line
 
@@ -2859,7 +2874,7 @@ class Insub(object):
 
     @filter(str)
     def read(self, lines, path):
-        """Read from files and add data to output"""
+        """Read from file and add data to output"""
         for line in lines:
             yield line
         with open(path, 'r') as fp:
@@ -3223,7 +3238,7 @@ class Insub(object):
 
     @filter(str, int, int)
     def paint(self, lines, brush, offset, skew):
-        """Make stuff pretty!"""
+        """Make stuff pretty"""
         map = BRUSH_MAP[brush]
         for line in lines:
             new = []
@@ -3235,6 +3250,8 @@ class Insub(object):
             yield colstr().join(new)
         self.paint_offset = offset % 256
 
+    rainbow = rain = paint
+
     @property
     def name(self):
         """Name of the script"""
@@ -3245,12 +3262,12 @@ class Insub(object):
         for line in self.render():
             yield line
 
+    usage = filter()
+
 
 def main():
     """CLI-based interface"""
-    optparse = OptionParser(version=__version__,
-                            usage='%prog <expression, ...>\n\n' +
-                                   CowScript.__doc__)
+    optparse = OptionParser(version=__version__, usage=Insub.usage)
     optparse.add_option('-i', dest='input_encoding', metavar='<encoding>',
                         default=INPUT_ENCODING,
                         help='input encoding (%default)')
@@ -3265,8 +3282,7 @@ def main():
     lines = Insub(expr, **opts.__dict__)
     data = colstr('\n').join(lines)
     data = data.render(opts.scheme)
-    data = data.encode(opts.output_encoding)
-    print data
+    print data.encode(opts.output_encoding)
 
     return 0
 
