@@ -2545,19 +2545,22 @@ class TokenizeError(ParseError):
     """Exception class for token parsing errors"""
 
 
+class InsubError(CowScriptError):
+
+    """Exception class for Insub"""
+
+
 class CowScript(object):
 
-    """Small language parser for Insub ASCII art filter suite
+    """Example of a complex expression:
 
-    Example of a complex expression:
-
-        $(cow_dir=/home/cjones/.irssi/cows)
-        $(figlet_dir=/usr/local/share/figlet)
-        [
-            ["hi" | paint | figlet | mirror]
-            +["there" | paint(usa) | banner(25,fg=#,bg=.) | rotate | mirror]
-            ["friend" | figlet(crawford) | paint | outline(box)]
-        ] | cow(wtf) | paint(canada)"""
+    $(cow_dir=/home/cjones/.irssi/cows)
+    $(figlet_dir=/usr/local/share/figlet)
+    [
+        ["hi" | paint | figlet | mirror]
+        +["there" | paint(usa) | banner(25,fg=#,bg=.) | rotate | mirror]
+        ["friend" | figlet(crawford) | paint | outline(box)]
+    ] | cow(wtf) | paint(canada)"""
 
     # tokens
     TOKEN_SETTING = 'SET'
@@ -2731,6 +2734,7 @@ class filter(object):
     """Decorator for registering a function as a filter"""
 
     filters = []
+    aliases = []
 
     def __init__(self, *types):
         self.types = types
@@ -2758,17 +2762,33 @@ class filter(object):
                 fixed.append(arg)
             return func(obj, lines, *fixed)
 
+        inner.__name__ = func.__name__
+        inner.__doc__ = func.__doc__
+        inner.isfilter = True
         return inner
 
     def __get__(self, obj, cls):
         """Descriptor method to generate help"""
         return '%%prog [options] [expr]\n\n%s\n\nFilters:\n\n%s' % (
                 CowScript.__doc__,
-                '\n'.join('%s%s - %s' % (
+                '\n'.join('    %s%s - %s' % (
                               func.__name__,
                               '(%s)' % ', '.join(args) if args else '',
                               func.__doc__)
                           for func, args in self.__class__.filters))
+
+
+def alias(func, *args, **kwargs):
+
+    """Create a filter alias"""
+
+    def inner(self, lines):
+        return func(self, lines, *args, **kwargs)
+
+    inner.__name__ = func.__name__
+    inner.__doc__ = func.__doc__
+    inner.isfilter = True
+    return inner
 
 
 class Insub(object):
@@ -2795,7 +2815,19 @@ class Insub(object):
             elif token == CowScript.TOKEN_DATA:
                 lines.append(colstr(val))
             elif token == CowScript.TOKEN_FILTER:
-                filter = getattr(self, val)
+
+                funcs = [getattr(self, key) for key in dir(self)
+                         if key.startswith(val)]
+                funcs = [func for func in funcs
+                         if hasattr(func, 'isfilter') and func.isfilter]
+
+                if len(funcs) > 1:
+                    matches = ', '.join(func.__name__ for func in funcs)
+                    error = 'ambiguous filter: %s (%s)' % (val, matches)
+                    raise InsubError(error)
+
+                filter = funcs.pop()
+
                 if args:
                     kwargs = {}
                     new = []
@@ -2899,7 +2931,7 @@ class Insub(object):
             yield line
 
     @filter()
-    def bork(self, lines):
+    def chef(self, lines):
         """Make speech more swedish"""
         raise NotImplementedError('needs colstr() implementation')
         for line in lines:
@@ -2911,6 +2943,8 @@ class Insub(object):
                         break
                 new.append(word)
             yield ' '.join(new)
+
+    bork = alias(chef)
 
     @filter()
     def scramble(self, lines):
@@ -2926,6 +2960,8 @@ class Insub(object):
                     word = first + colstr().join(word) + last
                 new.append(word)
             yield colstr(' ').join(new)
+
+    shuffle = alias(scramble)
 
     @filter()
     def leet(self, lines):
@@ -2997,6 +3033,8 @@ class Insub(object):
         for line in lines:
             if line != empty:
                 yield line
+
+    wave = alias(sine)
 
     @filter()
     def diagonal(self, lines):
@@ -3112,6 +3150,8 @@ class Insub(object):
         for line in output.splitlines():
             yield line
 
+    bart = alias(chalkboard)
+
     @filter(str, str, str, str, str)
     def cow(self, lines, file, dir, style, eyes, tongue):
         """Make a cow say it"""
@@ -3208,6 +3248,9 @@ class Insub(object):
                     left, line, ' ' * (size - len(line)), right)
         yield bottom
 
+    box = alias(outline, 'box')
+    arrow = alias(outline, 'arrow')
+
     @filter(str)
     def prefix(self, lines, string):
         """Prepend text to each line"""
@@ -3227,8 +3270,6 @@ class Insub(object):
             line = line.strip()
             if line:
                 yield line
-
-    # change the final visual appearance
 
     @filter()
     def nocolor(self, lines):
@@ -3250,7 +3291,7 @@ class Insub(object):
             yield colstr().join(new)
         self.paint_offset = offset % 256
 
-    rainbow = rain = paint
+    rainbow = alias(paint, 'rainbow')
 
     @property
     def name(self):
@@ -3278,7 +3319,8 @@ def main():
                         default=SCHEME, help='color scheme (%default)')
     opts, args = optparse.parse_args()
 
-    expr = sys.stdin.read().decode(opts.input_encoding)
+    expr = ' '.join(args) if args else sys.stdin.read()
+    expr = expr.decode(opts.input_encoding)
     lines = Insub(expr, **opts.__dict__)
     data = colstr('\n').join(lines)
     data = data.render(opts.scheme)
