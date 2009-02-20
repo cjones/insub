@@ -34,6 +34,9 @@ sub insub {
     my ($expr, $server, $dest) = @_;
     my ($output, $error);
 
+    # no args passed, assume they need help
+    $expr = '-h' if (!$expr);
+
     # run insub.py in an eval block in case it explodes so you don't get
     # rainbow shrapnel all over irc.
     eval {
@@ -109,9 +112,24 @@ sub execute_insub {
     # faulty auto-detection from ruining christmas.
     if ($pid == 0) {
         my $cmd = Irssi::settings_get_str('insub_path');
+
+        # some persistent data we want to pass to insub
+
         my @args = ('-s', Irssi::settings_get_str('insub_scheme'),
                     '-i', Irssi::settings_get_str('insub_encoding'),
                     '-o', Irssi::settings_get_str('insub_encoding'));
+
+        my $cow_dir = Irssi::settings_get_str('insub_cow_dir');
+        if ($cow_dir) {
+            push(@args, '-c');
+            push(@args, $cow_dir);
+        }
+
+        my $figlet_dir = Irssi::settings_get_str('insub_figlet_dir');
+        if ($figlet_dir) {
+            push(@args, '-f');
+            push(@args, $figlet_dir);
+        }
 
         # probably need a better way of doing this
         push(@args, '-h') if ($expr =~ $help_re);
@@ -180,6 +198,9 @@ sub init_onload {
     Irssi::settings_add_str('insub', 'insub_path', $bin);
     Irssi::settings_add_str('insub', 'insub_scheme', 'mirc');
     Irssi::settings_add_str('insub', 'insub_encoding', 'utf-8');
+    Irssi::settings_add_str('insub', 'insub_cow_dir', '');
+    Irssi::settings_add_str('insub', 'insub_figlet_dir', '');
+    #Irssi::settings_add_int('insub', 'insub_paint_offset', 0);
 }
 
 
@@ -188,7 +209,7 @@ sub init_onload {
 my $data = <<'END_OF_INSUB_SCRIPT';
 #!/usr/bin/env python
 #
-# Copyright (c) 2009, Chris Jones
+# Copyright (c) 2008, Chris Jones
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -230,7 +251,7 @@ import sys
 import os
 import re
 
-__version__ = '0.1'
+__version__ = '0.2'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
 
@@ -3505,6 +3526,15 @@ def main():
                         help='output encoding (%default)')
     optparse.add_option('-s', dest='scheme', metavar='<scheme>',
                         default=SCHEME, help='color scheme (%default)')
+    optparse.add_option('-c', dest='cow_dir', metavar='<cow dir>',
+                        default=DEFAULTS['cow_dir'],
+                        help='location of .cow files (default: %default)')
+    optparse.add_option('-f', dest='figlet_dir', metavar='<figlet dir>',
+                        default=DEFAULTS['figlet_dir'],
+                        help='location of figlet fonts (default: %default)')
+    optparse.add_option('-p', dest='paint_offset', metavar='<#>', type='int',
+                        default=DEFAULTS['paint_offset'],
+                        help='initial rainbow offset (default: %default)')
     opts, args = optparse.parse_args()
 
     expr = ' '.join(args) if args else sys.stdin.read()

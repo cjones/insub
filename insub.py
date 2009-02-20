@@ -42,7 +42,7 @@ import sys
 import os
 import re
 
-__version__ = '0.1'
+__version__ = '0.2'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
 
@@ -3317,6 +3317,15 @@ def main():
                         help='output encoding (%default)')
     optparse.add_option('-s', dest='scheme', metavar='<scheme>',
                         default=SCHEME, help='color scheme (%default)')
+    optparse.add_option('-c', dest='cow_dir', metavar='<cow dir>',
+                        default=DEFAULTS['cow_dir'],
+                        help='location of .cow files (default: %default)')
+    optparse.add_option('-f', dest='figlet_dir', metavar='<figlet dir>',
+                        default=DEFAULTS['figlet_dir'],
+                        help='location of figlet fonts (default: %default)')
+    optparse.add_option('-p', dest='paint_offset', metavar='<#>', type='int',
+                        default=DEFAULTS['paint_offset'],
+                        help='initial rainbow offset (default: %default)')
     opts, args = optparse.parse_args()
 
     expr = ' '.join(args) if args else sys.stdin.read()
