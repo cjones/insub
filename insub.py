@@ -42,7 +42,7 @@ import sys
 import os
 import re
 
-__version__ = '0.2'
+__version__ = '0.3'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
 
@@ -80,6 +80,7 @@ DEFAULTS = {'figlet_dir': None,
             'paint_brush': 'rainbow',
             'paint_offset': 0,
             'paint_skew': 1,
+            'rotate_cw': False,
             'wrap_width': 72,
             }
 
@@ -101,6 +102,8 @@ if not DEFAULTS['cow_dir']:
 
 # precompiled regex
 newline_re = re.compile(r'\r?\n')
+blank_re = re.compile(r'^\s*$')
+lead_re = re.compile(r'^(\s+)')
 
 # various presets for the rainbow filter
 BRUSH_MAP = {'rainbow': 'rrRRyyYYGGggccCCBBbbmmMM',
@@ -189,9 +192,8 @@ JIVE_RULES = [
         ('atlas', 'Isaac'), ('unix', 'slow mo-fo'), ('UNIX', 'dat slow mo-fo'),
         ('linux', 'dat leenucks mo-fo'), ('Linux', 'penguin unix'),
         ('LINUX', 'dat fast mo-fo'), (' takes ', " snatch'd "),
-        (' take ', ' snatch '), ('Mexican', 'wet-back'),
-        ('mexican', 'wet-back'), ('Italian', 'greaser'),
-        ('italian', 'greaser'), ("don't", "duzn't"), ('Jive', 'Ebonics'),
+        (' take ', ' snatch '),
+        ("don't", "duzn't"), ('Jive', 'Ebonics'),
         ('jive', 'JIBE'), ('[Ee]nglish', 'honky talk'), ('fool', 'honkyfool'),
         ('modem', 'doodad'), ('e the ', 'e da damn '),
         ('a the ', 'a da damn '), ('t the ', 't da damn '),
@@ -2860,7 +2862,7 @@ class Insub(object):
             yield line
         yield colstr('%s %s' % (self.name, __version__))
 
-    @filter(str, bool, float)
+    @filter(unicode, bool, float)
     def execute(self, lines, cmd, pty, timeout):
         """Execute cmd and add data to the output"""
         for line in lines:
@@ -2904,7 +2906,7 @@ class Insub(object):
         os.close(fd)
         os.waitpid(pid, 0)
 
-    @filter(str)
+    @filter(unicode)
     def read(self, lines, path):
         """Read from file and add data to output"""
         for line in lines:
@@ -3064,7 +3066,7 @@ class Insub(object):
         for i, line in sorted(out.iteritems()):
             yield line
 
-    @filter(str, str, str, str, bool, bool)
+    @filter(unicode, unicode, unicode, unicode, bool, bool)
     def figlet(self, lines, font, dir, direction, justify, reverse, flip):
         figlet = Figlet(prefix=dir, font=font, direction=direction,
                         justify=justify)
@@ -3075,7 +3077,7 @@ class Insub(object):
             lines = [line.translate(FIG_FLIP_MAP) for line in reversed(lines)]
         return lines
 
-    @filter(int, str, str)
+    @filter(int, unicode, unicode)
     def banner(self, lines, width, fg, bg):
         """Convert text to banner text"""
         output = []
@@ -3105,7 +3107,7 @@ class Insub(object):
                         scaled.append(ch)
                 yield colstr().join(scaled)
 
-    @filter(int, str)
+    @filter(int, unicode)
     def hug(self, lines, size, arms):
         """Add hugs around the text"""
         size = max(len(line) for line in lines)
@@ -3114,19 +3116,22 @@ class Insub(object):
         for line in lines:
             yield colstr('%s %s %s') % (left, line.center(size), right)
 
-    @filter()
-    def rotate(self, lines):
+    @filter(bool)
+    def rotate(self, lines, cw):
         """Rotate text 90 degrees"""
-        # XXX this can't possibly be rotating 90 degrees because two
-        # invocations put it back to normal.. but it's not 180 either.. so
-        # yeah, something isn't really working here is it.
         size = max(len(line) for line in lines)
-        new = defaultdict(colstr)
-        for line in reversed(lines):
-            line = line.ljust(size)
-            for i, ch in enumerate(reversed(line)):
-                new[i] += ch
-        for i, line in sorted(new.iteritems(), key=lambda item: item[0]):
+        lines = [line.ljust(size) for line in reversed(lines)]
+        rotated = []
+        for i in xrange(size):
+            rotated_line = []
+            for line in lines:
+                rotated_line.append(line[i])
+            if cw:
+                rotated_line = reversed(rotated_line)
+            rotated.append(colstr().join(rotated_line))
+        if cw:
+            rotated= reversed(rotated)
+        for line in rotated:
             yield line
 
     @filter(int)
@@ -3152,7 +3157,15 @@ class Insub(object):
 
     bart = alias(chalkboard)
 
-    @filter(str, str, str, str, str)
+    @filter(unicode)
+    def fill(self, lines, char):
+        """Filll all blank lines with provided background char"""
+        size = max(len(line) for line in lines)
+        lines = [line.ljust(size) for line in lines]
+        for line in lines:
+            yield line.replace(' ', char)
+
+    @filter(unicode, unicode, unicode, unicode, unicode)
     def cow(self, lines, file, dir, style, eyes, tongue):
         """Make a cow say it"""
 
@@ -3221,7 +3234,7 @@ class Insub(object):
         for line in reversed(lines):
             yield line
 
-    @filter(str)
+    @filter(unicode)
     def outline(self, lines, style):
         """Draw an outline around text"""
         lines = list(lines)
@@ -3251,13 +3264,13 @@ class Insub(object):
     box = alias(outline, 'box')
     arrow = alias(outline, 'arrow')
 
-    @filter(str)
+    @filter(unicode)
     def prefix(self, lines, string):
         """Prepend text to each line"""
         for line in lines:
             yield colstr(string) + line
 
-    @filter(str)
+    @filter(unicode)
     def postfix(self, lines, string):
         """Append text to each line"""
         for line in lines:
@@ -3266,10 +3279,22 @@ class Insub(object):
     @filter()
     def strip(self, lines):
         """Remove empty lines and excess whitespace"""
+        lines = [line for line in lines if not blank_re.search(line.plain)]
+        smallest = None
         for line in lines:
-            line = line.strip()
-            if line:
-                yield line
+            try:
+                lead = lead_re.search(line.plain).group(1)
+            except AttributeError:
+                continue
+            lead = len(lead)
+            if smallest is None:
+                smallest = lead
+            elif lead < smallest:
+                smallest = lead
+        if smallest:
+            lines = [line[smallest - 1:] for line in lines]
+        for line in lines:
+            yield line.rstrip()
 
     @filter()
     def nocolor(self, lines):
@@ -3277,7 +3302,7 @@ class Insub(object):
         for line in lines:
             yield line.clone(None, line.nocolor_char * len(line))
 
-    @filter(str, int, int)
+    @filter(unicode, int, int)
     def paint(self, lines, brush, offset, skew):
         """Make stuff pretty"""
         map = BRUSH_MAP[brush]
@@ -3291,7 +3316,9 @@ class Insub(object):
             yield colstr().join(new)
         self.paint_offset = offset % 256
 
-    rainbow = alias(paint, 'rainbow')
+    # create aliases for the different brushmaps
+    for key in BRUSH_MAP:
+        locals()[key] = alias(paint, key)
 
     @property
     def name(self):
