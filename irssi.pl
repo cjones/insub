@@ -209,7 +209,7 @@ sub init_onload {
 my $data = <<'END_OF_INSUB_SCRIPT';
 #!/usr/bin/env python
 #
-# Copyright (c) 2008, Chris Jones
+# Copyright (c) 2008-2009, Chris Jones
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -251,7 +251,7 @@ import sys
 import os
 import re
 
-__version__ = '0.3'
+__version__ = '0.4'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
 
@@ -3328,6 +3328,18 @@ class Insub(object):
     @filter(bool)
     def rotate(self, lines, cw):
         """Rotate text 90 degrees"""
+        m={45: 124,
+                47: 92,
+                51: 119,
+                60: 94,
+                62: 118,
+                66: 109,
+                92: 47,
+                94: 62,
+                109: 51,
+                118: 60,
+                119: 66,
+                124: 45, 95:124, 40:45, 41:45} #XXX need a func
         size = max(len(line) for line in lines)
         lines = [line.ljust(size) for line in reversed(lines)]
         rotated = []
@@ -3341,7 +3353,7 @@ class Insub(object):
         if cw:
             rotated= reversed(rotated)
         for line in rotated:
-            yield line
+            yield line.translate(m)
 
     @filter(int)
     def wrap(self, lines, width):
@@ -3504,6 +3516,48 @@ class Insub(object):
             lines = [line[smallest - 1:] for line in lines]
         for line in lines:
             yield line.rstrip()
+
+    wsor_re = re.compile(r'(\s+)|\S+')
+
+    @filter(unicode)
+    def strike(self, lines, char):
+        """Replace all non-whitespace with character"""
+        for line in lines:
+            new = []
+            i = 0
+            while i < len(line):
+                match = self.wsor_re.match(line.plain, i)
+                if not match:
+                    break
+                x, y = match.span()
+                part = line[x:y]
+                if not match.group(1):
+                    part.plain = char * (y - x)
+                new.append(part)
+                i = y
+            yield colstr().join(new)
+
+    @filter(unicode)
+    def negative(self, lines, char):
+        """Make a negative with the given char"""
+        size = max(len(line) for line in lines)
+        lines = [line.ljust(size) for line in lines]
+        for line in lines:
+            new = []
+            i = 0
+            while i < len(line):
+                match = self.wsor_re.match(line.plain, i)
+                if not match:
+                    break
+                x, y = match.span()
+                part = line[x:y]
+                if match.group(1):
+                    part.plain = char * (y - x)
+                else:
+                    part.plain = ' ' * (y - x)
+                new.append(part)
+                i = y
+            yield colstr().join(new)
 
     @filter()
     def nocolor(self, lines):
