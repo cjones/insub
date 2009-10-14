@@ -42,7 +42,7 @@ import sys
 import os
 import re
 
-__version__ = '0.4'
+__version__ = '0.5'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
 
@@ -82,6 +82,9 @@ DEFAULTS = {'figlet_dir': None,
             'paint_skew': 1,
             'rotate_cw': False,
             'wrap_width': 72,
+            'dongs_freq': 3,
+            'dongs_left': 'e==8',
+            'dongs_right': '8==e',
             }
 
 # try to find location of figlet and cowsay files
@@ -2922,7 +2925,6 @@ class Insub(object):
             yield line
         yield colstr(' ').join(random.sample(SPOOK_PHRASES, words))
 
-
     @filter()
     def jive(self, lines):
         """Make speech more funky"""
@@ -2975,6 +2977,31 @@ class Insub(object):
                     ch = ch.clone(random.choice(LEET_MAP[ch.plain]), ch.colmap)
                 new.append(ch)
             yield colstr().join(new)
+
+    @filter(int, unicode, unicode)
+    def dongs(self, lines, freq, left, right):
+        """Add dongs"""
+        points = {}
+        for i, line in enumerate(lines):
+            for j, ch in enumerate(line):
+                if ch != ' ':
+                    points.setdefault(i, []).append(j)
+        choices = []
+        for i, js in points.iteritems():
+            x, y = min(js), max(js)
+            if x >= len(left):
+                choices.append((i, x - len(left), left))
+            choices.append((i, y, right))
+        dongs = random.sample(choices, freq)
+        for i, j, str in dongs:
+            line = list(lines[i])
+            for x in xrange(len(str)):
+                y = x + j
+                if y == len(line):
+                    line.append(' ')
+                line[x + j] = str[x]
+            lines[i] = colstr().join(line)
+        return lines
 
     @filter()
     def uniflip(self, lines):
@@ -3409,6 +3436,7 @@ def main():
                         help='initial rainbow offset (default: %default)')
     opts, args = optparse.parse_args()
 
+    #expr = '"test"|cow|dongs'
     expr = ' '.join(args) if args else sys.stdin.read()
     expr = expr.decode(opts.input_encoding)
     lines = Insub(expr, **opts.__dict__)
