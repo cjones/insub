@@ -42,7 +42,7 @@ import sys
 import os
 import re
 
-__version__ = '0.5'
+__version__ = '0.6'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
 __all__ = ['Insub']
 
@@ -2992,6 +2992,8 @@ class Insub(object):
             if x >= len(left):
                 choices.append((i, x - len(left), left))
             choices.append((i, y, right))
+        if freq > len(choices):
+            freq = len(choices)
         dongs = random.sample(choices, freq)
         for i, j, str in dongs:
             line = list(lines[i])
