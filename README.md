@@ -1,5 +1,5 @@
 USAGE
-=====
+-----
 
     $ ./insub.py <<<'"hi"|figlet|cow'
      ___________
@@ -21,7 +21,7 @@ of all the filters, run with -h
 
 
 IRSSI
-=====
+-----
 
 irssi/insub.pl is a thin perl wrapper around the python script, which is
 a total hack, but works. I am told irssi supports python embedding
@@ -30,3 +30,11 @@ use, so whatever. Use it like any other irssi module:
 
     $ cp -av irssi/insub.pl ~/.irssi/scripts/
     [irssi] /script load insub
+
+
+LEGACY
+------
+
+The original version (of both names) can be found in the old/ directory.
+It mostly works the same, except does not support unicode in any form, and
+is written in terrible perl.
