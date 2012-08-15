@@ -1,0 +1,14 @@
+$the_cow = <<EOC;
+    $thoughts
+     $thoughts
+      $thoughts                                                  .  ooOOOOOoo,.
+ .--------------------------------..-.. _            ...el OOOOOOOOOOOOOo.
+|\\ ________________________________\\\\ \\\\\\/     ...eelllll OOOOOOOOOOOOOOOo
+| |  __ __ _    __ __ _   __ __ __  ||-|||.elllllllllllll OOOOOOOOOOOOOOO
+| | |__|__/_\\  |__|__|_| |__|__|__| || |||llllllllllllllll OOOOOOOOOOO*'
+| | |__|__)__) |__|_|     __.--|__| ||_|||llllllllllllllllll`*OOO*""``
+| | |__|__|_/  |__|__ _  |__|--'__  | . ||lllllllllllle*"``
+| | |__|       |__|__|_| |__|__|__| |( )||llllle*""`
+ \\|                                 | ' ||""``      `
+  '---------------------------------'---'
+EOC
