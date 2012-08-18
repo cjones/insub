@@ -59,7 +59,7 @@ use vars qw/$BASH_PROMPT $ANSI/;
 $| = 1;
 
 $NAME = 'gay';
-$VERSION = '14.0';
+$VERSION = '14.1';
 
 %IRSSI = (
 	name		=> $NAME,
@@ -3342,20 +3342,6 @@ if ($CONTEXT eq 'terminal') {
 	} else {
 		printf "%s\n", $USAGE;
 	}
-
-	exit(0);
-} elsif ($CONTEXT eq 'cgi') {
-	eval 'use CGI';
-	if ($@) {
-		printf STDERR "error: CGI module unloadable.\n";
-		exit(1);
-	}
-
-	print CGI::header, qq(<html><body text="white" bgcolor="black">\n);
-
-	insub(CGI::param("args"));
-
-	print "</body></html>\n";
 
 	exit(0);
 } elsif ($CONTEXT eq 'irssi') {
