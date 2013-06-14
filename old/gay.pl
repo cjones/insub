@@ -51,6 +51,8 @@
 ##############################################################################
 
 use strict;
+use Encode;
+use Unicode::Normalize;
 use Text::Wrap;
 use IPC::Open3;
 use vars qw/$VERSION %IRSSI $SPLASH $NAME $CONTEXT $OUTPUT/;
@@ -681,6 +683,16 @@ sub process {
 		(@args, $error_returned) = shellwords($text);
 		return if $error_returned;
 	}
+	if ($CONTEXT eq 'irssi') {
+        my $term_type = 'term_type';
+        if (Irssi::version() > 20040819) { # when did the setting name change?
+			$term_type = 'term_charset';
+        }
+		if (Irssi::settings_get_str($term_type) =~ /utf/i) {
+			push @args, '-utf8';
+		}
+	}
+
 
 	my $throttle = 0;
 	my $force = 0;
@@ -757,6 +769,7 @@ sub process {
 	}
 	$text = join(" ", @text);
 	$text =~ s/\\n/\n/sg;
+	Encode::_utf8_on($text) if $flags =~ /8/;
 
 	########################################
 	# sanity check before applying filters #
@@ -864,6 +877,7 @@ sub process {
 	# where to get text
 	$text = "$IRSSI{name} $IRSSI{version} - $IRSSI{download}" if $flags =~ /v/;
 	$text = $stdin                   if defined($stdin);
+	$text = NFD($text);
 	$text = execute($text)           if $flags =~ /e/;
 	$text = slurp($text, $utf8)      if $flags =~ /x/;
 	$text = spookify($text)          if $flags =~ /s/;
@@ -911,6 +925,7 @@ sub process {
 
 	$text = prefix($text, $prefix) if $prefix;
 	$text = strip($text) if $flags =~ /n/;
+	$text = NFC($text);
 
 	########################
 	# output final product #
@@ -1313,7 +1328,7 @@ sub rainbow {
 		if (!$colorize % 2) { $output .= "$line\n"; next }
 
 		my $i = 0;
-		foreach my $char (split('', $line)) {
+		foreach my $char ($line =~ /(\X)/g) {
 			my $color = substr($map, ($offset + $i) % length($map), 1);
 			$output .= do_color($char, $color, undef, 'code');
 			$i++;
@@ -1390,10 +1405,11 @@ sub matrix {
 	$text =~ s/\n/ /sg;
 
 	my @text;
-	for (my $i = 0; $i < length($text); $i += $size) {
-		my $chunk = substr($text, $i, $size);
-		for (my $j = 0; $j < length($chunk); $j++) {
-			$text[$j] .= substr($chunk, $j, 1) . (" " x $spacing);
+	my @matrix = $text =~ /(\X)/g;
+	for (my $i = 0; $i < @matrix; $i += $size) {
+		my @chunk = @matrix[$i..$i+$size-1];
+		for (my $j = 0; $j < @chunk; $j++) {
+			$text[$j] .= $chunk[$j] . (" " x $spacing);
 		}
 	}
 	return join("\n", @text);
@@ -1836,7 +1852,7 @@ sub scramble {
 	foreach my $line (split(/\n/, $text)) {
 		my @newline;
 		foreach my $word (split(/\s+/, $line)) {
-			my @letters = split(//, $word);
+			my @letters = $word =~ /(\X)/g;
 			my $first = shift(@letters);
 			my $last = pop(@letters);
 			fisher_yates_shuffle(\@letters) if scalar(@letters) > 0;
@@ -1948,7 +1964,7 @@ sub tree {
 		}
 
 		# split line into an array of characters
-		my @row = split(//, $line);
+		my @row = $line =~ /(\X)/g;
 
 		# determine which points can be changed
 		my @map;
@@ -2017,7 +2033,7 @@ sub rotate {
 	my @lines = split(/\r?\n/, $text);
 	my @new;
 	foreach my $line (reverse @lines) {
-		my @cols = reverse split('', $line);
+		my @cols = reverse ($line =~ /(\X)/g);
 		for (my $i = 0; $i < @cols; $i++) {
 			$new[$i] .= $cols[$i];
 		}
@@ -2067,7 +2083,7 @@ sub sine {
 	my @output;
 	my $lineNO = 0;
 	foreach my $line (split(/\n/, $text)) {
-		my @chrs = split(//, $line);
+		my @chrs = $line =~ /(\X)/g;
 		my $width  = @chrs * $freq;
 
 		my $plot = {};
@@ -2109,7 +2125,7 @@ sub banner {
 
 	my $style = shift;
 
-	my @chrs = split(//, $text);
+	my @chrs = $text =~ /(\X)/g;
 	my $iter = 0;
 
 	my $output;
