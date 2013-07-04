@@ -1,3 +1,7 @@
+16.0: Thu Jul  4 16:19:33 2013
+    * Some unicode support thanks to @obsdler
+    * Updated -spook words with PRISM list of watch-words (supposedly).
+
 15.1: Sun Aug 19 05:30:51 2012
     * Separate value add cows from cowsay cows
 
