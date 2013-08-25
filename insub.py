@@ -1800,12 +1800,12 @@ class colstr(object):
                         codes = []
                         if fg_changed or intense_changed:
                             newcol = attrs['map'].index((col[1], col[0]))
-                            codes.append(str(newcol))
+                            codes.append("%02d" % (newcol,))
                         if bg_changed:
                             if not codes:
                                 codes.append('')
                             newcol = attrs['map'].index((0, col[2]))
-                            codes.append(str(newcol))
+                            codes.append("%02d" % (newcol,))
                         outcol = '\x03%s' % ','.join(codes)
                         if next and next.isdigit():
                             outcol += '\x16\x16'
