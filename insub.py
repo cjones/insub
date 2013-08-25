@@ -111,6 +111,7 @@ lead_re = re.compile(r'^(\s+)')
 # various presets for the rainbow filter
 BRUSH_MAP = {'rainbow': 'rrRRyyYYGGggccCCBBbbmmMM',
              'rain2': 'rRyYGgcCBbmM',
+             'rain3': 'RyYGcBM',
              'usa': 'RRWWBB',
              'blue': 'bB',
              'green': 'gG',
