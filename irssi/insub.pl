@@ -3234,6 +3234,12 @@ class Insub(object):
             yield line.translate(ASCIIFLIP)
 
     @filter()
+    def asciibig(self, lines):
+        """Add spaces between every character"""
+        for line in lines:
+            yield colstr(" ").join(line)
+
+    @filter()
     def mirror(self, lines):
         """Mirror image text"""
         size = max(len(line) for line in lines)
