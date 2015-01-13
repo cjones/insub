@@ -1,0 +1,3 @@
+#!/bin/sh -
+# redo all the tags to not be all broken. and stuff.
+exit 1; eval "$(git for-each-ref refs/tags --shell --format='ref=%(refname) tag="${ref##*/}" vers="${tag##*-}" min="${vers##*.}"; printf "%d\t%d\t%s\n" ${vers%.$min} $min $(git rev-parse %(objectname)^{commit})')" | sort -k1n -k2n -k3f | uniq -c | while IFS=" 	" read -r freq maj min commit; do tag="$maj.$min"; git update-ref refs/tags/"$tag" "$(printf "object %s\ntype commit\ntag %s\ntagger %s\n\ntag release %s\n" "$commit" "$tag" "$(git show -s --date=raw --pretty=tformat:"%an <%ae> %ad" "$commit")" "$tag" | git mktag)" ""; done; eval "$(git for-each-ref refs/tags --shell --format='obj=%(refname); case "${obj##*/}" in (insub-*|gay-*) git update-ref -d "$obj" ;; esac')"
