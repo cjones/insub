@@ -1,3 +1,8 @@
+50.0: Wed Nov 16 01:43:20 2016
+    * Add half-assed slack support. Use an "api test token" so it can spoof
+      your user name. https://api.slack.com/docs/oauth-test-tokens
+    * Fix the startup splash message to not lie about how to get help. That alone merits a bump to 50.x
+
 16.0: Thu Jul  4 16:19:33 2013
     * Some unicode support thanks to @obsdler
     * Updated -spook words with PRISM list of watch-words (supposedly).
