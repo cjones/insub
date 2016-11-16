@@ -55,13 +55,16 @@ use Encode;
 use Unicode::Normalize;
 use Text::Wrap;
 use IPC::Open3;
+use URI::Escape qw(uri_escape_utf8);
 use vars qw/$VERSION %IRSSI $SPLASH $NAME $CONTEXT $OUTPUT/;
 use vars qw/$BASH_PROMPT $ANSI/;
+use vars qw/$SLACK_BASEURL $SLACK_LISTURL $SLACK_CHATURL/;
+use constant { false => 0, true => 1 };
 
 $| = 1;
 
 $NAME = 'gay';
-$VERSION = '16.0';
+$VERSION = '50.0';
 
 %IRSSI = (
 	name		=> $NAME,
@@ -72,6 +75,10 @@ $VERSION = '16.0';
 	description	=> 'a lot of annoying ascii color/art text filters',
 	license		=> 'BSD',
 );
+
+$SLACK_BASEURL = "https://slack.com/api/";
+$SLACK_LISTURL = $SLACK_BASEURL . "channels.list";
+$SLACK_CHATURL = $SLACK_BASEURL . "chat.postMessage";
 
 ##########################################
 # Figure out where we are being run from #
@@ -110,8 +117,9 @@ if ($CONTEXT eq 'terminal') {
 my $stdin;
 
 # some command names based on our root name
-my $EXEC = $NAME . "exec";
-my $CAT  = $NAME . "cat";
+my $EXEC  = $NAME . "exec";
+my $CAT   = $NAME . "cat";
+my $SLACK = $NAME . "slack";
 
 # Time::HiRes only works on some systems that support
 # gettimeofday system calls.  safely test for this
@@ -163,6 +171,7 @@ my $settings = {
 	sine_frequency		=> "0.3",
 	sine_background		=> " ",
 	banner_style		=> "phrase",
+	slack_token		=> "",
 };
 
 # wrap settings routines.. irssi cares about type
@@ -721,9 +730,10 @@ sub insub {
 }
 
 # these are aliases that use a predefined set of filters
-sub insubexec { process("e",   @_) }    # execute
-sub insubcat  { process("x",   @_) }	# byte restriction
-sub gv        { process("v",   @_) }	# display version info
+sub insubexec  { process("e",   @_) }    # execute
+sub insubcat   { process("x",   @_) }	# byte restriction
+sub gv         { process("v",   @_) }	# display version info
+sub insubslack { process("z",   @_) }   # send to slack via webapi
 
 ###############################
 # this handles the processing #
@@ -910,6 +920,9 @@ sub process {
 	# the TREE cannot be colored
 	$flags =~ s/r//g if $flags =~ /t/;
 
+	# slack doesn't support color.
+	$flags =~ s/r//g if $flags =~ /z/;
+
 	if ($throttle) {
 		unless ($can_throttle) {
 			cprint("Sorry, your system does not allow high resolution sleeps");
@@ -936,7 +949,7 @@ sub process {
 	# filter text based on flags #
 	##############################
 	
-	my $flag_list = "348BCDFHIJMRSTabcdefhjlmnoprstuvwxP";
+	my $flag_list = "348BCDFHIJMRSTabcdefhjlmnoprstuvwxPz";
 
 	# flag sanity check.  because there are a lot of flags,
 	# require master list to contain all viable flags
@@ -964,7 +977,7 @@ sub process {
 	# where to get text
 	$text = "$IRSSI{name} $IRSSI{version} - $IRSSI{download}" if $flags =~ /v/;
 	$text = $stdin                   if defined($stdin);
-	$text = NFD($text);
+	$text = NFD($text);   # the fuck? perl unicode support is pretty bleak
 	$text = execute($text)           if $flags =~ /e/;
 	$text = slurp($text, $utf8)      if $flags =~ /x/;
 	$text = spookify($text)          if $flags =~ /s/;
@@ -1043,6 +1056,91 @@ sub process {
 		}
 	}
 
+	# slack
+	if ($CONTEXT eq 'irssi' && $flags =~ /z/) {
+		my $token = settings_get_str("slack_token") || "";
+		if ($token eq "") {
+			cprint("You need to /set slack_token <token>");
+			return;
+		}
+
+		# do we have useragent?
+		eval "use LWP::UserAgent";
+		if ($@) {
+			cprint("LWP::UserAgent failed to load: $!");
+			return;
+		}
+
+		my $ua = LWP::UserAgent->new;
+		$ua->ssl_opts(verify_hostname => false);
+
+		my $opts = {
+			token		=> $token,
+		};
+		my @items = ();
+		for my $key (sort keys %{$opts}) {
+			push @items, sprintf("%s=%s", uri_escape_utf8($key), uri_escape_utf8($opts->{$key}));
+		}
+		my $url = sprintf("%s?%s", $SLACK_LISTURL, join("&", @items));
+		my $req = HTTP::Request->new(GET => $url);
+		my $res = $ua->request($req);
+		if (!$res->is_success()) {
+			cprint("Error making request: " . $res->status_line);
+			return;
+		}
+		my $msg = $res->as_string;
+		$msg =~ s/^.*?[{]/{/s;
+		$msg =~ s/:/ => /sg;
+		eval("\$msg = " . $msg);  # lol.. fuck it. i am not installing some CPAN shit to parse json, sry
+		if ($msg->{ok} != true) {
+			cprint("error in json response: " . $msg);
+			return;
+		}
+
+		my $chanmap = {};
+		foreach my $c (@{$msg->{channels}}) {
+			if (($c->{is_member} == true) && ($c->{is_channel} == true)) {
+				$chanmap->{$c->{name}} = $c->{id};
+			}
+		}
+
+		my $cname;
+		if ($sendto =~ m/^#(.*?)$/) {
+			$cname = $1;
+		} else {
+			cprint("Only channels are supported, not privmsg");
+			return;
+		}
+		my $id = $chanmap->{$cname} || "";
+		if ($id eq "") {
+			cprint("couldn't find channel " . $cname);
+			return;
+		}
+
+		$text =~ s/&/&amp;/g;
+		$text =~ s/</&lt;/g;
+		$text =~ s/>/&gt;/g;
+		$opts = {
+			token		=> $token,
+			channel		=> $id,
+			text		=> sprintf("```%s```", $text),
+			as_user		=> "false",
+			link_names	=> "0",
+			username	=> $server->{nick},
+		};
+
+		@items = ();
+		for my $key (sort keys %{$opts}) {
+			push @items, sprintf("%s=%s", uri_escape_utf8($key), uri_escape_utf8($opts->{$key}));
+		}
+		$url = sprintf("%s?%s", $SLACK_CHATURL, join("&", @items));
+		$req = HTTP::Request->new(GET => $url);
+		$res = $ua->request($req);
+		if (!$res->is_success()) {
+			cprint("Error making chat request: " . $res->status_line);
+		}
+		return;
+	}
 
 	foreach my $line (split(/\n/, $text)) {
 		if ($CONTEXT eq 'irssi') {
@@ -3455,6 +3553,7 @@ if ($CONTEXT eq 'terminal') {
 	Irssi::command_bind($NAME, \&insub);
 	Irssi::command_bind($EXEC, \&insubexec);
 	Irssi::command_bind($CAT, \&insubcat);
+	Irssi::command_bind($SLACK, \&insubslack);
 	Irssi::command_bind("gv", \&gv);
 
 
@@ -3494,8 +3593,8 @@ if ($CONTEXT eq 'terminal') {
 	Irssi::settings_add_int($IRSSI{name}, 'spook_words', $settings->{spook_words});
 	Irssi::settings_add_int($IRSSI{name}, 'hug_size', $settings->{hug_size});
 	Irssi::settings_add_str($IRSSI{name}, 'banner_style', $settings->{banner_style});
-
-	cprint("$SPLASH.  '/$NAME help' for usage");
+	Irssi::settings_add_str("slack", 'slack_token', $settings->{slack_token});
+	cprint("$SPLASH.  '/$NAME -help' for usage");
 }
 
 # note, do not add an __END__ here, because irssi does not like it.  thx plz
